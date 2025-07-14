@@ -16,6 +16,7 @@ class TokenResponse(BaseModel):
 class FolderCreate(BaseModel):
     name: str
     parent_path: Optional[str] = "/"
+    remark: Optional[str] = None
 
 from pydantic import BaseModel
 

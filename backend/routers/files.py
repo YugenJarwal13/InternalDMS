@@ -28,6 +28,7 @@ BASE_STORAGE_PATH = os.path.abspath("storage")  # Root directory for file upload
 def upload_files(
     parent_path: str = Form(...),
     files: List[UploadFile] = File(...),
+    remark: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
@@ -70,7 +71,7 @@ def upload_files(
             "size": file_record.size,
             "id": file_record.id,
         })
-    log_activity(db, user.id, action="Upload File", target_path=file_record.path)
+    log_activity(db, user.id, action="Upload File", target_path=file_record.path, details=remark)
     return {"message": "Files uploaded successfully", "files": uploaded_file_data}
 
 

@@ -97,3 +97,54 @@ async def move_on_remote(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Remote move failed: {str(e)}")
+
+# Proxy: Search remote files/folders
+@router.get("/search")
+async def search_remote(
+    remote_base_url: str = Query(..., description="Remote server base URL"),
+    query: str = Query(..., min_length=1, description="Search query"),
+):
+    try:
+        return await send_request(
+            method="GET",
+            url=f"{remote_base_url}/search",
+            params={"query": query}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Remote search failed: {str(e)}")
+
+# Proxy: Filter remote files/folders
+@router.get("/filter")
+async def filter_remote(
+    remote_base_url: str = Query(..., description="Remote server base URL"),
+    owner_email: str = Query(None, description="Email of file owner"),
+    is_folder: bool = Query(None, description="True for folders, False for files"),
+    created_after: str = Query(None, description="Created after (ISO format)"),
+    created_before: str = Query(None, description="Created before (ISO format)")
+):
+    try:
+        params = {"owner_email": owner_email, "is_folder": is_folder, "created_after": created_after, "created_before": created_before}
+        # Remove None values
+        params = {k: v for k, v in params.items() if v is not None}
+        return await send_request(
+            method="GET",
+            url=f"{remote_base_url}/filter",
+            params=params
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Remote filter failed: {str(e)}")
+
+# Proxy: Get remote file/folder metadata
+@router.get("/metadata")
+async def remote_metadata(
+    remote_base_url: str = Query(..., description="Remote server base URL"),
+    path: str = Query(..., description="Path to file/folder")
+):
+    try:
+        return await send_request(
+            method="GET",
+            url=f"{remote_base_url}/metadata",
+            params={"path": path}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Remote metadata failed: {str(e)}")

@@ -21,6 +21,7 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storag
 def create_folder(data: FolderCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
     folder_name = data.name.strip()
     parent_path = data.parent_path.strip().lstrip("/")
+    remark = data.remark  # Get the optional remark
 
     #  Validate folder name
     if not folder_name or "/" in folder_name or "\\" in folder_name:
@@ -52,7 +53,7 @@ def create_folder(data: FolderCreate, db: Session = Depends(get_db), user=Depend
     db.add(new_folder)
     db.commit()
     db.refresh(new_folder)
-    log_activity(db, user.id, action="Create Folder", target_path=new_folder.path)
+    log_activity(db, user.id, action="Create Folder", target_path=new_folder.path, details=remark)
     return {"message": "Folder created", "folder": new_folder.name, "id": new_folder.id}
 
 
