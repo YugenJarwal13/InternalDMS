@@ -14,6 +14,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 from utils import log_activity
+from fastapi.encoders import jsonable_encoder
 
 
 router = APIRouter()
@@ -245,8 +246,8 @@ def search_items(
                 "path": item.path,
                 "is_folder": item.is_folder,
                 "size": item.size,
-                "created_at": item.created_at,
-                "modified_at": item.modified_at
+                "created_at": jsonable_encoder(item.created_at),
+                "modified_at": jsonable_encoder(item.modified_at)
             }
             for item in results
         ]
@@ -283,8 +284,8 @@ def get_metadata(
         "path": record.path,
         "is_folder": record.is_folder,
         "size": record.size,
-        "created_at": record.created_at,
-        "modified_at": record.modified_at,
+        "created_at": jsonable_encoder(record.created_at),
+        "modified_at": jsonable_encoder(record.modified_at),
         "owner": db.query(User).filter(User.id == record.owner_id).first().email
     }
 
@@ -324,7 +325,7 @@ def filter_files(
             "path": f.path,
             "is_folder": f.is_folder,
             "size": f.size,
-            "created_at": f.created_at,
+            "created_at": jsonable_encoder(f.created_at),
             "owner": db.query(User).filter(User.id == f.owner_id).first().email
         }
         for f in files

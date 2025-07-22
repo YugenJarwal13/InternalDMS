@@ -6,7 +6,7 @@ from schemas import FolderCreate
 from dependencies import get_current_user
 from database import get_db
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 import shutil
 from utils import log_activity
 from models import File
@@ -84,8 +84,8 @@ def list_folder_contents(
             "path": os.path.join(parent_path, entry.name).replace("\\", "/"),
             "is_folder": entry.is_dir(),
             "size": entry.stat().st_size if entry.is_file() else 0,
-            "created_at": entry.stat().st_ctime,
-            "modified_at": entry.stat().st_mtime
+            "created_at": datetime.fromtimestamp(entry.stat().st_ctime, tz=timezone.utc).isoformat(),
+            "modified_at": datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc).isoformat()
         })
     return items
 

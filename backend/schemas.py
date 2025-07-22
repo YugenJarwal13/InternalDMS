@@ -38,3 +38,12 @@ class MoveFolderRequest(BaseModel):
 class MoveFileRequest(BaseModel):
     source_path: str
     destination_path: str
+
+class UserLogin(BaseModel):
+    email: str
+    password: str
+
+class UserEdit(BaseModel):
+    email: str
+    password: str
+    role: str

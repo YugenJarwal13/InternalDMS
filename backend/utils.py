@@ -2,14 +2,14 @@
 #ACTIVITY LOGGING UTILITY
 from models import ActivityLog
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timezone
 
 def log_activity(db: Session, user_id: int, action: str, target_path: str, details: str = None):
     log = ActivityLog(
         user_id=user_id,
         action=action,
         target_path=target_path,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),  # Store as timezone-aware UTC
         details=details
     )
     db.add(log)
