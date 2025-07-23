@@ -240,7 +240,7 @@ const FileNode = ({ item, parentPath, onAction }) => {
   );
 };
 
-const FileExplorer = () => {
+export const FileExplorer = () => {
   return (
     <div className="max-w-3xl mx-auto mt-8">
       <h3 className="mb-4 font-bold text-2xl text-blue-800 flex items-center gap-2">
@@ -252,5 +252,3 @@ const FileExplorer = () => {
     </div>
   );
 };
-
-export default FileExplorer;

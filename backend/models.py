@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
 
+
 class Role(Base):
     __tablename__ = "roles"
     id = Column(Integer, primary_key=True, index=True)
@@ -23,6 +24,12 @@ class User(Base):
 
     role = relationship("Role", back_populates="users")
     files = relationship("File", back_populates="owner")
+    activity_logs = relationship(
+        "ActivityLog",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True
+    )
 
 
 class File(Base):
@@ -39,15 +46,15 @@ class File(Base):
     owner = relationship("User", back_populates="files")
 
 
-#ACITIVITY LOG TABLE:
+# ACTIVITY LOG TABLE:
 
 class ActivityLog(Base):
     __tablename__ = "activity_logs"
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     action = Column(String, nullable=False)  # e.g., "create_folder", "upload", "rename_file"
     target_path = Column(String, nullable=False)
     timestamp = Column(DateTime, default=datetime.utcnow)
     details = Column(String, nullable=True)  # optional JSON string or plain text
 
-    user = relationship("User")
+    user = relationship("User", back_populates="activity_logs")
