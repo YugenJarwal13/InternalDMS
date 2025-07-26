@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import NotAuthorizedModal from './NotAuthorizedModal';
 import { authFetch } from '../../utils/authFetch';
+import UploadFolderModal from './UploadFolderModal';
 import UploadModal from './UploadModal';
 import RenameModal from './RenameModal';
 import DeleteConfirmModal from './DeleteConfirmModal';
@@ -56,6 +57,7 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
   const [showDelete, setShowDelete] = useState(false);
   const [showMove, setShowMove] = useState(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [showUploadFolder, setShowUploadFolder] = useState(false);
   const [showNotAuth, setShowNotAuth] = useState(false);
   // Helper to check authorization before showing any modal
   const checkAuth = async (action, targetPath = path) => {
@@ -176,9 +178,22 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
             if (ok) setShowUpload(true);
           }}
           className="p-1 rounded hover:bg-green-100"
-          title="Upload"
+          title="Upload Files"
         >
           <HiUpload className="w-5 h-5 text-green-600" />
+        </button>
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (showUploadFolder) return;
+            const ok = await checkAuth('upload');
+            if (ok) setShowUploadFolder(true);
+          }}
+          className="p-1 rounded hover:bg-green-200"
+          title="Upload Folder"
+        >
+          <span role="img" aria-label="Upload Folder" className="w-5 h-5 text-green-700">📁⤴️</span>
         </button>
         <button
           onClick={async (e) => {
@@ -239,6 +254,7 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
 
       <CreateFolderModal isOpen={showCreateFolder} onClose={() => setShowCreateFolder(false)} parentPath={path} onCreateSuccess={fetchChildren} />
       <UploadModal isOpen={showUpload} onClose={() => setShowUpload(false)} parentPath={path} onUploadSuccess={handleUploadSuccess} />
+      <UploadFolderModal isOpen={showUploadFolder} onClose={() => setShowUploadFolder(false)} parentPath={path} onUploadSuccess={handleUploadSuccess} />
       <RenameModal isOpen={showRename} onClose={() => setShowRename(false)} path={path} currentName={name} isFolder={true} onRenameSuccess={handleRenameSuccess} />
       <DeleteConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={() => handleDeleteFolder(false)} itemName={name} />
       <MoveModal open={showMove} onClose={() => setShowMove(false)} onMove={handleMoveFolder} currentPath={path} />

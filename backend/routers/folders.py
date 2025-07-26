@@ -55,19 +55,6 @@ def create_folder(data: FolderCreate, db: Session = Depends(get_db), user=Depend
     )
     db.add(new_folder)
     db.commit()
-def delete_folder(
-    path: str = Body(..., embed=True, description="Path to the folder to delete"),
-    force: bool = Body(False, embed=True, description="Set to true if user confirms deletion of non-empty folder"),
-    user=Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    from permission_utils import check_parent_permission, require_owner_or_admin
-    parent_path = os.path.dirname(path.strip("/"))
-    check_parent_permission(parent_path, db, user)
-    folder_db_path = path if path.startswith("/") else f"/{path}"
-    require_owner_or_admin(folder_db_path, db, user)
-    #  Secure full path
-    abs_path = os.path.abspath(os.path.join(BASE_DIR, path.strip("/")))
 BASE_STORAGE_PATH = BASE_DIR  # Reuse fixed BASE_DIR
 
 @router.get("/list")
@@ -226,5 +213,75 @@ def move_folder(
     log_activity(db, user.id, action="Folder Moved", target_path=os.path.join(data.destination_path, os.path.basename(src))
 )
     return {"message": "Folder moved successfully", "new_path": os.path.join(data.destination_path, os.path.basename(src))}
+
+# Upload a folder via multiple files with relative paths (best practice)
+from fastapi import UploadFile, File as FastAPIFile, Form
+from typing import List
+
+@router.post("/upload-folder-structure")
+async def upload_folder_structure(
+    parent_path: str = Form(..., description="Path to parent folder where to upload"),
+    files: List[UploadFile] = FastAPIFile(..., description="Files in the folder, with relative paths"),
+    relpaths: List[str] = Form(..., description="Relative paths for each file, matching order of files list"),
+    db: Session = Depends(get_db),
+    user=Depends(get_current_user)
+):
+    from permission_utils import check_parent_permission
+    import os
+    # Authorization: user must have permission to upload in parent_path
+    check_parent_permission(parent_path, db, user)
+
+    # Save each file to the correct location and collect all folders
+    created_folders = set()
+    created_files = []
+    for upload_file, relpath in zip(files, relpaths):
+        safe_relpath = relpath.strip().replace("..", "").replace("\\", "/").lstrip("/")
+        dest_path = os.path.abspath(os.path.join(BASE_DIR, parent_path.strip("/"), safe_relpath))
+        if not dest_path.startswith(BASE_DIR):
+            raise HTTPException(status_code=400, detail=f"Invalid file path: {relpath}")
+        dest_dir = os.path.dirname(dest_path)
+        # Track all folders in the path
+        rel_folder_parts = safe_relpath.split("/")[:-1]
+        for i in range(1, len(rel_folder_parts)+1):
+            folder_path = "/" + "/".join([parent_path.strip("/")] + rel_folder_parts[:i]).replace("//", "/")
+            created_folders.add(folder_path)
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
+        with open(dest_path, "wb") as f:
+            content = await upload_file.read()
+            f.write(content)
+        # Track file for DB
+        file_db_path = "/" + os.path.join(parent_path.strip("/"), safe_relpath).replace("\\", "/").replace("//", "/")
+        created_files.append((os.path.basename(dest_path), file_db_path, os.path.getsize(dest_path)))
+
+    # Add folders to DB (if not already present)
+    for folder_path in sorted(created_folders, key=lambda x: x.count("/")):
+        if not db.query(File).filter(File.path == folder_path, File.is_folder == True).first():
+            db.add(File(
+                name=os.path.basename(folder_path.rstrip("/")) or parent_path.strip("/"),
+                path=folder_path,
+                is_folder=True,
+                size=0,
+                owner_id=user.id,
+                created_at=datetime.utcnow(),
+                modified_at=datetime.utcnow()
+            ))
+    # Add files to DB
+    for name, path, size in created_files:
+        if not db.query(File).filter(File.path == path, File.is_folder == False).first():
+            db.add(File(
+                name=name,
+                path=path,
+                is_folder=False,
+                size=size,
+                owner_id=user.id,
+                created_at=datetime.utcnow(),
+                modified_at=datetime.utcnow()
+            ))
+    db.commit()
+    from utils import log_activity
+    log_activity(db, user.id, action="Upload Folder Structure", target_path=parent_path)
+    return {"message": "Folder structure uploaded successfully"}
+
 
 
