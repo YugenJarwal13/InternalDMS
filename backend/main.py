@@ -2,9 +2,11 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from routers import files, folders, users
 from routers import remote
 from routers import logs
+from routers import authorize
 
 app = FastAPI()
 
@@ -25,11 +27,13 @@ app.add_middleware(
 )
 
 # Include all routers (modular structure)
+
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(folders.router, prefix="/api/folders", tags=["Folders"])
 app.include_router(remote.router)
 app.include_router(logs.router, prefix="/api", tags=["Logs"])
+app.include_router(authorize.router)
 
 
 @app.get("/")

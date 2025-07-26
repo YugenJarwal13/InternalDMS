@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import NotAuthorizedModal from './NotAuthorizedModal';
 import { authFetch } from '../../utils/authFetch';
 import UploadModal from './UploadModal';
 import RenameModal from './RenameModal';
@@ -55,6 +56,21 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
   const [showDelete, setShowDelete] = useState(false);
   const [showMove, setShowMove] = useState(false);
   const [showCreateFolder, setShowCreateFolder] = useState(false);
+  const [showNotAuth, setShowNotAuth] = useState(false);
+  // Helper to check authorization before showing any modal
+  const checkAuth = async (action, targetPath = path) => {
+    try {
+      await authFetch('/api/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, path: targetPath }),
+      });
+      return true;
+    } catch (err) {
+      if (err.code === 403) setShowNotAuth(true);
+      return false;
+    }
+  };
 
   const fetchChildren = async () => {
     setLoading(true);
@@ -138,19 +154,69 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
         </button>
         <HiFolder className="w-6 h-6 text-blue-700" />
         <span className="truncate flex-1">{name}</span>
-        <button onClick={() => setShowCreateFolder(true)} className="p-1 rounded hover:bg-blue-100" title="New Folder">
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (showCreateFolder) return;
+            const ok = await checkAuth('create_folder');
+            if (ok) setShowCreateFolder(true);
+          }}
+          className="p-1 rounded hover:bg-blue-100"
+          title="New Folder"
+        >
           <HiPlus className="w-5 h-5 text-blue-600" />
         </button>
-        <button onClick={() => setShowUpload(true)} className="p-1 rounded hover:bg-green-100" title="Upload">
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (showUpload) return;
+            const ok = await checkAuth('upload');
+            if (ok) setShowUpload(true);
+          }}
+          className="p-1 rounded hover:bg-green-100"
+          title="Upload"
+        >
           <HiUpload className="w-5 h-5 text-green-600" />
         </button>
-        <button onClick={() => setShowRename(true)} className="p-1 rounded hover:bg-yellow-100" title="Rename">
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (showRename) return;
+            const ok = await checkAuth('rename');
+            if (ok) setShowRename(true);
+          }}
+          className="p-1 rounded hover:bg-yellow-100"
+          title="Rename"
+        >
           <HiPencil className="w-5 h-5 text-yellow-600" />
         </button>
-        <button onClick={() => setShowMove(true)} className="p-1 rounded hover:bg-purple-100" title="Move">
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (showMove) return;
+            const ok = await checkAuth('move');
+            if (ok) setShowMove(true);
+          }}
+          className="p-1 rounded hover:bg-purple-100"
+          title="Move"
+        >
           <HiArrowsRightLeft className="w-5 h-5 text-purple-600" />
         </button>
-        <button onClick={() => setShowDelete(true)} className="p-1 rounded hover:bg-red-100" title="Delete">
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (showDelete) return;
+            const ok = await checkAuth('delete');
+            if (ok) setShowDelete(true);
+          }}
+          className="p-1 rounded hover:bg-red-100"
+          title="Delete"
+        >
           <HiTrash className="w-5 h-5 text-red-500" />
         </button>
         {loading && <span className="ml-2 text-xs text-gray-400">Loading...</span>}
@@ -176,6 +242,7 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
       <RenameModal isOpen={showRename} onClose={() => setShowRename(false)} path={path} currentName={name} isFolder={true} onRenameSuccess={handleRenameSuccess} />
       <DeleteConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={() => handleDeleteFolder(false)} itemName={name} />
       <MoveModal open={showMove} onClose={() => setShowMove(false)} onMove={handleMoveFolder} currentPath={path} />
+      <NotAuthorizedModal open={showNotAuth} onClose={() => setShowNotAuth(false)} />
     </li>
   );
 };
@@ -184,6 +251,21 @@ const FileNode = ({ item, parentPath, onAction }) => {
   const [showRename, setShowRename] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
   const [showMove, setShowMove] = useState(false);
+  const [showNotAuth, setShowNotAuth] = useState(false);
+  // Helper to check authorization before showing any modal
+  const checkAuth = async (action, targetPath = item.path) => {
+    try {
+      await authFetch('/api/authorize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, path: targetPath }),
+      });
+      return true;
+    } catch (err) {
+      if (err.code === 403) setShowNotAuth(true);
+      return false;
+    }
+  };
 
   const handleRenameSuccess = async () => {
     await onAction();
@@ -224,18 +306,49 @@ const FileNode = ({ item, parentPath, onAction }) => {
       <button onClick={() => downloadFile(item.path, item.name)} className="p-1 rounded hover:bg-blue-100" title="Download">
         <HiUpload className="w-5 h-5 text-blue-600" />
       </button>
-      <button onClick={() => setShowRename(true)} className="p-1 rounded hover:bg-yellow-100" title="Rename">
+      <button
+        onClick={async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (showRename) return;
+          const ok = await checkAuth('rename');
+          if (ok) setShowRename(true);
+        }}
+        className="p-1 rounded hover:bg-yellow-100"
+        title="Rename"
+      >
         <HiPencil className="w-5 h-5 text-yellow-600" />
       </button>
-      <button onClick={() => setShowMove(true)} className="p-1 rounded hover:bg-purple-100" title="Move">
+      <button
+        onClick={async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (showMove) return;
+          const ok = await checkAuth('move');
+          if (ok) setShowMove(true);
+        }}
+        className="p-1 rounded hover:bg-purple-100"
+        title="Move"
+      >
         <HiArrowsRightLeft className="w-5 h-5 text-purple-600" />
       </button>
-      <button onClick={() => setShowDelete(true)} className="p-1 rounded hover:bg-red-100" title="Delete">
+      <button
+        onClick={async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (showDelete) return;
+          const ok = await checkAuth('delete');
+          if (ok) setShowDelete(true);
+        }}
+        className="p-1 rounded hover:bg-red-100"
+        title="Delete"
+      >
         <HiTrash className="w-5 h-5 text-red-500" />
       </button>
       <RenameModal isOpen={showRename} onClose={() => setShowRename(false)} path={item.path} currentName={item.name} isFolder={false} onRenameSuccess={handleRenameSuccess} />
       <DeleteConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDeleteFile} itemName={item.name} />
       <MoveModal open={showMove} onClose={() => setShowMove(false)} onMove={handleMoveFile} currentPath={item.path} />
+      <NotAuthorizedModal open={showNotAuth} onClose={() => setShowNotAuth(false)} />
     </li>
   );
 };

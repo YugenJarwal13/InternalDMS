@@ -29,6 +29,13 @@ export const authFetch = async (url, options = {}) => {
     window.location.href = "/login";
     throw new Error("Unauthorized");
   }
-
+  if (res.status === 403) {
+    // Forbidden
+    const data = await res.json().catch(() => ({}));
+    const message = data.detail || 'Not Authorized';
+    const err = new Error(message);
+    err.code = 403;
+    throw err;
+  }
   return res.json();
 };
