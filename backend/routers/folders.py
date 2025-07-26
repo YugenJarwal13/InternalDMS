@@ -19,9 +19,12 @@ BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storag
 
 @router.post("/create")
 def create_folder(data: FolderCreate, db: Session = Depends(get_db), user=Depends(get_current_user)):
+
+    from permission_utils import check_parent_permission
     folder_name = data.name.strip()
     parent_path = data.parent_path.strip().lstrip("/")
     remark = data.remark  # Get the optional remark
+    check_parent_permission(parent_path, db, user)
 
     #  Validate folder name
     if not folder_name or "/" in folder_name or "\\" in folder_name:
@@ -52,14 +55,19 @@ def create_folder(data: FolderCreate, db: Session = Depends(get_db), user=Depend
     )
     db.add(new_folder)
     db.commit()
-    db.refresh(new_folder)
-    log_activity(db, user.id, action="Create Folder", target_path=new_folder.path, details=remark)
-    return {"message": "Folder created", "folder": new_folder.name, "id": new_folder.id}
-
-
-
-
-#  List folder contents
+def delete_folder(
+    path: str = Body(..., embed=True, description="Path to the folder to delete"),
+    force: bool = Body(False, embed=True, description="Set to true if user confirms deletion of non-empty folder"),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    from permission_utils import check_parent_permission, require_owner_or_admin
+    parent_path = os.path.dirname(path.strip("/"))
+    check_parent_permission(parent_path, db, user)
+    folder_db_path = path if path.startswith("/") else f"/{path}"
+    require_owner_or_admin(folder_db_path, db, user)
+    #  Secure full path
+    abs_path = os.path.abspath(os.path.join(BASE_DIR, path.strip("/")))
 BASE_STORAGE_PATH = BASE_DIR  # Reuse fixed BASE_DIR
 
 @router.get("/list")
@@ -99,8 +107,13 @@ def rename_folder(
     db: Session = Depends(get_db),
     user = Depends(get_current_user)
 ):
+
+    from permission_utils import check_parent_permission, require_owner_or_admin
     old_path = os.path.normpath(os.path.join(BASE_DIR, data.old_path.strip("/")))
     new_path = os.path.normpath(os.path.join(BASE_DIR, os.path.dirname(data.old_path.strip("/")), data.new_name))
+    parent_path = os.path.dirname(data.old_path.strip("/"))
+    check_parent_permission(parent_path, db, user)
+    require_owner_or_admin(data.old_path, db, user)
 
     #  Prevent traversal
     if not old_path.startswith(BASE_DIR) or not new_path.startswith(BASE_DIR):
@@ -133,6 +146,11 @@ def delete_folder(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    from permission_utils import check_parent_permission, require_owner_or_admin
+    parent_path = os.path.dirname(path.strip("/"))
+    check_parent_permission(parent_path, db, user)
+    folder_db_path = path if path.startswith("/") else f"/{path}"
+    require_owner_or_admin(folder_db_path, db, user)
     #  Secure full path
     abs_path = os.path.abspath(os.path.join(BASE_DIR, path.strip("/")))
 
@@ -173,9 +191,16 @@ def move_folder(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+    from permission_utils import check_parent_permission, require_owner_or_admin
     src = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.source_path.strip("/")))
     dest_dir = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.destination_path.strip("/")))
     new_folder_path = os.path.join(dest_dir, os.path.basename(src))
+    # Permission checks
+    src_parent = os.path.dirname(data.source_path.strip("/"))
+    dest_parent = data.destination_path.strip("/")
+    check_parent_permission(src_parent, db, user)
+    check_parent_permission(dest_parent, db, user)
+    require_owner_or_admin(data.source_path, db, user)
     
     #  Validations
     if not src.startswith(BASE_STORAGE_PATH) or not dest_dir.startswith(BASE_STORAGE_PATH):

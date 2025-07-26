@@ -33,6 +33,9 @@ def upload_files(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+
+    from permission_utils import check_parent_permission
+    check_parent_permission(parent_path.strip("/"), db, user)
     target_folder = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
 
     if not target_folder.startswith(BASE_STORAGE_PATH):
@@ -120,9 +123,8 @@ def delete_file(
     if not file_record:
         raise HTTPException(status_code=404, detail="File record not found")
 
-    # Check permissions
-    if user.role.name != "admin" and file_record.owner_id != user.id:
-        raise HTTPException(status_code=403, detail="Not authorized to delete this file")
+    from permission_utils import require_owner_or_admin
+    require_owner_or_admin(f"/{decoded_path}", db, user)
 
     # Delete from disk
     try:
@@ -149,7 +151,12 @@ def rename_file(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+
+    from permission_utils import check_parent_permission, require_owner_or_admin
     old_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.path.strip("/")))
+    parent_path = os.path.dirname(data.path.strip("/"))
+    check_parent_permission(parent_path, db, user)
+    require_owner_or_admin(data.path, db, user)
 
     # ✅ Path validation
     if not old_path.startswith(BASE_STORAGE_PATH):
@@ -196,9 +203,17 @@ def move_file(
     db: Session = Depends(get_db),
     user=Depends(get_current_user)
 ):
+
+    from permission_utils import check_parent_permission, require_owner_or_admin
     src_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.source_path.strip("/")))
     dest_folder = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.destination_path.strip("/")))
     dest_path = os.path.join(dest_folder, os.path.basename(src_path))
+    # Permission checks
+    src_parent = os.path.dirname(data.source_path.strip("/"))
+    dest_parent = data.destination_path.strip("/")
+    check_parent_permission(src_parent, db, user)
+    check_parent_permission(dest_parent, db, user)
+    require_owner_or_admin(data.source_path, db, user)
 
     #  Safety checks
     if not src_path.startswith(BASE_STORAGE_PATH) or not dest_folder.startswith(BASE_STORAGE_PATH):
@@ -239,36 +254,18 @@ def search_items(
             FileModel.owner_id == user.id,
             FileModel.name.ilike(f"%{query}%")  # ✅ case-insensitive partial match
         ).all()
-
-        # Filter results to only include files that exist in storage
-        existing_items = []
-        for item in results:
-            # Remove leading slash if present and normalize path
-            clean_path = item.path.lstrip("/").replace("/", os.sep)
-            item_path = os.path.join(BASE_STORAGE_PATH, clean_path)
-            
-            try:
-                # Check if the path exists and matches the type (file/folder)
-                exists = os.path.exists(item_path)
-                is_dir = os.path.isdir(item_path)
-                
-                # Only add if the item exists and matches its type
-                if exists and is_dir == item.is_folder:
-                    size = os.path.getsize(item_path) if not item.is_folder else item.size
-                    existing_items.append({
-                        "id": item.id,
-                        "name": item.name,
-                        "path": item.path,
-                        "is_folder": item.is_folder,
-                        "size": size,
-                        "created_at": jsonable_encoder(item.created_at),
-                        "modified_at": jsonable_encoder(item.modified_at)
-                    })
-            except (OSError, IOError):
-                # Skip if there's any filesystem error
-                continue
-                
-        return existing_items
+        return [
+            {
+                "id": item.id,
+                "name": item.name,
+                "path": item.path,
+                "is_folder": item.is_folder,
+                "size": item.size,
+                "created_at": jsonable_encoder(item.created_at),
+                "modified_at": jsonable_encoder(item.modified_at)
+            }
+            for item in results
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 
@@ -337,33 +334,15 @@ def filter_files(
         query = query.filter(FileModel.created_at <= created_before)
 
     files = query.all()
-    
-    # Filter results to only include files that exist in storage
-    existing_files = []
-    for f in files:
-        # Remove leading slash if present and normalize path
-        clean_path = f.path.lstrip("/").replace("/", os.sep)
-        file_path = os.path.join(BASE_STORAGE_PATH, clean_path)
-        
-        try:
-            # Check if the path exists and matches the type (file/folder)
-            exists = os.path.exists(file_path)
-            is_dir = os.path.isdir(file_path)
-            
-            # Only add if the item exists and matches its type
-            if exists and is_dir == f.is_folder:
-                size = os.path.getsize(file_path) if not f.is_folder else f.size
-                existing_files.append({
-                    "name": f.name,
-                    "path": f.path,
-                    "is_folder": f.is_folder,
-                    "size": size,
-                    "created_at": jsonable_encoder(f.created_at),
-                    "owner": db.query(User).filter(User.id == f.owner_id).first().email
-                })
-        except (OSError, IOError):
-            # Skip if there's any filesystem error
-            continue
-            
-    return existing_files
+    return [
+        {
+            "name": f.name,
+            "path": f.path,
+            "is_folder": f.is_folder,
+            "size": f.size,
+            "created_at": jsonable_encoder(f.created_at),
+            "owner": db.query(User).filter(User.id == f.owner_id).first().email
+        }
+        for f in files
+    ]
     
