@@ -7,18 +7,36 @@ export const UserProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+
   useEffect(() => {
-    const fetchMe = async () => {
-      try {
-        const data = await authFetch('/api/users/me');
-        setUser(data);
-      } catch {
-        setUser(null);
-      } finally {
-        setLoading(false);
+    let lastToken = localStorage.getItem('accessToken');
+    let interval = setInterval(() => {
+      const currentToken = localStorage.getItem('accessToken');
+      if (currentToken !== lastToken) {
+        lastToken = currentToken;
+        setLoading(true);
+        if (!currentToken) {
+          setUser(null);
+          setLoading(false);
+        } else {
+          authFetch('/api/users/me')
+            .then(data => setUser(data))
+            .catch(() => setUser(null))
+            .finally(() => setLoading(false));
+        }
       }
-    };
-    fetchMe();
+    }, 500);
+    // Initial fetch
+    if (lastToken) {
+      authFetch('/api/users/me')
+        .then(data => setUser(data))
+        .catch(() => setUser(null))
+        .finally(() => setLoading(false));
+    } else {
+      setUser(null);
+      setLoading(false);
+    }
+    return () => clearInterval(interval);
   }, []);
 
   return (
