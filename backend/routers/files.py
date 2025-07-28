@@ -1,5 +1,3 @@
-# backend/routers/files.py
-
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, Form, Query, File, Body
 from sqlalchemy.orm import Session
 from models import File as FileModel,User
@@ -16,13 +14,210 @@ from datetime import datetime
 from utils import log_activity
 from fastapi.encoders import jsonable_encoder
 
-
 router = APIRouter()
 
 BASE_STORAGE_PATH = os.path.abspath("storage")  # Root directory for file uploads
 
+# DISK-BASED SEARCH ENDPOINT
+@router.get("/disk-search")
+def disk_search(
+    query: str = Query(..., min_length=1),
+    parent_path: str = Query("/", description="Path to folder to search in"),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Only search inside user's accessible folder (parent_path)
+    abs_parent = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
+    if not abs_parent.startswith(BASE_STORAGE_PATH):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not os.path.exists(abs_parent):
+        raise HTTPException(status_code=404, detail="Folder not found")
+    results = []
+    for root, dirs, files in os.walk(abs_parent):
+        # Search folders
+        for d in dirs:
+            if query.lower() in d.lower():
+                rel_path = os.path.relpath(os.path.join(root, d), BASE_STORAGE_PATH)
+                path_with_slash = "/" + rel_path.replace("\\", "/")
+                
+                # Try to get folder metadata from DB
+                db_record = db.query(FileModel).filter(FileModel.path == path_with_slash).first()
+                
+                folder_info = {
+                    "name": d,
+                    "path": path_with_slash,
+                    "is_folder": True
+                }
+                
+                # Add DB metadata if available
+                if db_record:
+                    folder_info.update({
+                        "id": db_record.id,
+                        "created_at": jsonable_encoder(db_record.created_at),
+                        "modified_at": jsonable_encoder(db_record.modified_at),
+                        "owner_id": db_record.owner_id,
+                        "owner": db.query(User).filter(User.id == db_record.owner_id).first().email
+                    })
+                
+                results.append(folder_info)
+                
+        # Search files
+        for f in files:
+            if query.lower() in f.lower():
+                rel_path = os.path.relpath(os.path.join(root, f), BASE_STORAGE_PATH)
+                path_with_slash = "/" + rel_path.replace("\\", "/")
+                file_path = os.path.join(root, f)
+                
+                # Basic file info from disk
+                file_info = {
+                    "name": f,
+                    "path": path_with_slash,
+                    "is_folder": False,
+                    "size": os.path.getsize(file_path)
+                }
+                
+                # Try to get file metadata from DB
+                db_record = db.query(FileModel).filter(FileModel.path == path_with_slash).first()
+                
+                # Add DB metadata if available
+                if db_record:
+                    file_info.update({
+                        "id": db_record.id,
+                        "created_at": jsonable_encoder(db_record.created_at),
+                        "modified_at": jsonable_encoder(db_record.modified_at),
+                        "owner_id": db_record.owner_id,
+                        "owner": db.query(User).filter(User.id == db_record.owner_id).first().email
+                    })
+                
+                results.append(file_info)
+    return results
 
+# DISK-BASED FILTER ENDPOINT
+@router.get("/disk-filter")
+def disk_filter(
+    parent_path: str = Query("/", description="Path to folder to filter in"),
+    is_folder: Optional[bool] = Query(None, description="True for folders, False for files, None for both"),
+    min_size: Optional[int] = Query(None, description="Minimum file size in bytes"),
+    max_size: Optional[int] = Query(None, description="Maximum file size in bytes"),
+    owner_email: Optional[str] = Query(None, description="Email of file owner"),
+    created_after: Optional[datetime] = Query(None, description="Filter items created after this date"),
+    created_before: Optional[datetime] = Query(None, description="Filter items created before this date"),
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Prepare owner_id filter if owner_email is provided
+    owner_id = None
+    if owner_email:
+        owner = db.query(User).filter(User.email == owner_email).first()
+        if not owner:
+            raise HTTPException(status_code=404, detail="User not found")
+        owner_id = owner.id
 
+    # Validate and prepare the parent path
+    abs_parent = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
+    if not abs_parent.startswith(BASE_STORAGE_PATH):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not os.path.exists(abs_parent):
+        raise HTTPException(status_code=404, detail="Folder not found")
+    
+    results = []
+    
+    # First scan the filesystem to find all files/folders
+    for root, dirs, files in os.walk(abs_parent):
+        # Process folders if needed
+        if is_folder in (None, True):
+            for d in dirs:
+                rel_path = os.path.relpath(os.path.join(root, d), BASE_STORAGE_PATH)
+                path_with_slash = "/" + rel_path.replace("\\", "/")
+                
+                # Try to get folder metadata from DB
+                db_record = db.query(FileModel).filter(FileModel.path == path_with_slash).first()
+                
+                # Apply database filters
+                if db_record:
+                    # Skip if owner filter doesn't match
+                    if owner_id is not None and db_record.owner_id != owner_id:
+                        continue
+                    
+                    # Skip if date filters don't match
+                    if created_after and db_record.created_at < created_after:
+                        continue
+                    if created_before and db_record.created_at > created_before:
+                        continue
+                    
+                    # All filters passed, create result with DB metadata
+                    folder_info = {
+                        "id": db_record.id,
+                        "name": d,
+                        "path": path_with_slash,
+                        "is_folder": True,
+                        "created_at": jsonable_encoder(db_record.created_at),
+                        "modified_at": jsonable_encoder(db_record.modified_at),
+                        "owner_id": db_record.owner_id,
+                        "owner": db.query(User).filter(User.id == db_record.owner_id).first().email
+                    }
+                    results.append(folder_info)
+                # If no DB record but we're not filtering by owner or dates, include it with basic info
+                elif owner_id is None and created_after is None and created_before is None:
+                    folder_info = {
+                        "name": d,
+                        "path": path_with_slash,
+                        "is_folder": True
+                    }
+                    results.append(folder_info)
+                
+        # Process files if needed
+        if is_folder in (None, False):
+            for f in files:
+                file_path = os.path.join(root, f)
+                size = os.path.getsize(file_path)
+                
+                # Apply size filters
+                if (min_size is not None and size < min_size) or (max_size is not None and size > max_size):
+                    continue
+                    
+                rel_path = os.path.relpath(file_path, BASE_STORAGE_PATH)
+                path_with_slash = "/" + rel_path.replace("\\", "/")
+                
+                # Try to get file metadata from DB
+                db_record = db.query(FileModel).filter(FileModel.path == path_with_slash).first()
+                
+                # Apply database filters
+                if db_record:
+                    # Skip if owner filter doesn't match
+                    if owner_id is not None and db_record.owner_id != owner_id:
+                        continue
+                    
+                    # Skip if date filters don't match
+                    if created_after and db_record.created_at < created_after:
+                        continue
+                    if created_before and db_record.created_at > created_before:
+                        continue
+                    
+                    # All filters passed, create result with DB metadata
+                    file_info = {
+                        "id": db_record.id,
+                        "name": f,
+                        "path": path_with_slash,
+                        "is_folder": False,
+                        "size": size,
+                        "created_at": jsonable_encoder(db_record.created_at),
+                        "modified_at": jsonable_encoder(db_record.modified_at),
+                        "owner_id": db_record.owner_id,
+                        "owner": db.query(User).filter(User.id == db_record.owner_id).first().email
+                    }
+                    results.append(file_info)
+                # If no DB record but we're not filtering by owner or dates, include it with basic info
+                elif owner_id is None and created_after is None and created_before is None:
+                    file_info = {
+                        "name": f,
+                        "path": path_with_slash,
+                        "is_folder": False,
+                        "size": size
+                    }
+                    results.append(file_info)
+                
+    return results
 
 # ✅ MULTIPLE FILES UPLOAD
 @router.post("/upload")

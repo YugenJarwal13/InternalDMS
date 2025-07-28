@@ -1,20 +1,32 @@
-import { useState } from 'react';
+import { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser } from '../services/api';
+import { UserContext } from '../context/UserContext';
+
 const LoginPage = () => {
   const navigate = useNavigate();
+  const { login } = useContext(UserContext);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError('');
+    
     try {
-      await loginUser({ email, password });
-      navigate('/dashboard'); 
+      const data = await loginUser({ email, password });
+      // Use the context login function to set token and fetch user data
+      await login(data.access_token);
+      navigate('/dashboard');
     } catch (err) {
-      setError(err.message);
+      console.error('Login error:', err);
+      setError(err.message || 'Login failed. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -39,8 +51,12 @@ const LoginPage = () => {
           className="w-full mb-6 p-2 border border-gray-300 rounded"
           required
         />
-        <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700">
-          Log In
+        <button 
+          type="submit" 
+          className="w-full bg-blue-600 text-white p-2 rounded hover:bg-blue-700 disabled:bg-blue-400"
+          disabled={isLoading}
+        >
+          {isLoading ? 'Logging in...' : 'Log In'}
         </button>
       </form>
     </div>

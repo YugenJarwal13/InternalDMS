@@ -6,7 +6,7 @@ from permission_utils import require_owner_or_admin, check_parent_permission
 
 router = APIRouter()
 
-@router.post("/api/authorize")
+@router.post("/authorize")
 async def authorize_action(request: Request, db: Session = Depends(get_db), user=Depends(get_current_user)):
     data = await request.json()
     action = data.get('action')

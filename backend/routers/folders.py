@@ -9,7 +9,7 @@ import os
 from datetime import datetime, timezone
 import shutil
 from utils import log_activity
-from models import File
+from models import File, User
 
 router = APIRouter()
 
@@ -55,6 +55,12 @@ def create_folder(data: FolderCreate, db: Session = Depends(get_db), user=Depend
     )
     db.add(new_folder)
     db.commit()
+    
+    # Log folder creation activity
+    folder_path = f"/{parent_path}/{folder_name}".replace("//", "/")
+    log_activity(db, user.id, action="Create Folder", target_path=folder_path, details=remark)
+    
+    return {"message": "Folder created successfully", "path": folder_path}
 BASE_STORAGE_PATH = BASE_DIR  # Reuse fixed BASE_DIR
 
 @router.get("/list")
@@ -74,14 +80,36 @@ def list_folder_contents(
     items = []
 
     for entry in os.scandir(abs_path):
-        items.append({
+        item_path = os.path.join(parent_path, entry.name).replace("\\", "/")
+        # Normalize path for consistent DB lookup
+        normalized_path = "/" + item_path.strip("/")
+        
+        # Get basic file info from disk
+        basic_info = {
             "name": entry.name,
-            "path": os.path.join(parent_path, entry.name).replace("\\", "/"),
+            "path": item_path,
             "is_folder": entry.is_dir(),
             "size": entry.stat().st_size if entry.is_file() else 0,
             "created_at": datetime.fromtimestamp(entry.stat().st_ctime, tz=timezone.utc).isoformat(),
             "modified_at": datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc).isoformat()
-        })
+        }
+        
+        # Try to enrich with DB metadata
+        db_record = db.query(File).filter(File.path == normalized_path).first()
+        if db_record:
+            # Add owner information if available
+            owner = db.query(User).filter(User.id == db_record.owner_id).first()
+            if owner:
+                basic_info["owner_id"] = db_record.owner_id
+                basic_info["owner"] = owner.email
+            
+            # Use DB timestamps if available
+            if db_record.created_at:
+                basic_info["created_at"] = db_record.created_at.isoformat() 
+            if db_record.modified_at:
+                basic_info["modified_at"] = db_record.modified_at.isoformat()
+        
+        items.append(basic_info)
     return items
 
 
@@ -115,13 +143,43 @@ def rename_folder(
     os.rename(old_path, new_path)
 
     # Update DB record
-    folder_record = db.query(File).filter(File.path == data.old_path, File.is_folder == True).first()
-    if folder_record:
-        folder_record.name = data.new_name
-        folder_record.path = f"/{os.path.dirname(data.old_path.strip('/'))}/{data.new_name}".replace("//", "/")
-        folder_record.modified_at = datetime.utcnow()
-        db.commit()
-    log_activity(db, user.id, action="Renamed Folder", target_path=folder_record.path)
+    old_db_path = data.old_path
+    if not old_db_path.startswith('/'):
+        old_db_path = f"/{old_db_path}"
+    while "//" in old_db_path:
+        old_db_path = old_db_path.replace("//", "/")
+        
+    new_folder_name = data.new_name
+    parent_folder_path = os.path.dirname(old_db_path.strip('/'))
+    
+    # Calculate new path
+    new_db_path = f"/{parent_folder_path}/{new_folder_name}".replace("//", "/")
+    
+    print(f"Renaming folder from {old_db_path} to {new_db_path}")
+    
+    # Get all affected items (folder itself and all its contents)
+    affected_items = db.query(File).filter(
+        (File.path == old_db_path) | 
+        (File.path.startswith(old_db_path + "/"))
+    ).all()
+    
+    print(f"Found {len(affected_items)} items to update:")
+    for item in affected_items:
+        old_path = item.path
+        if item.path == old_db_path:
+            # This is the folder being renamed
+            item.name = new_folder_name
+            item.path = new_db_path
+            item.modified_at = datetime.utcnow()
+        else:
+            # This is a child item - update its path
+            relative_path = item.path[len(old_db_path):]
+            item.path = new_db_path + relative_path
+            item.modified_at = datetime.utcnow()
+        print(f"  - {item.id}: {old_path} -> {item.path}")
+    
+    db.commit()
+    log_activity(db, user.id, action="Renamed Folder", target_path=new_db_path)
     return {"message": "Folder renamed successfully"}
 
 
@@ -136,16 +194,43 @@ def delete_folder(
     from permission_utils import check_parent_permission, require_owner_or_admin
     parent_path = os.path.dirname(path.strip("/"))
     check_parent_permission(parent_path, db, user)
-    folder_db_path = path if path.startswith("/") else f"/{path}"
+    
+    # Normalize the folder path for consistent DB lookups
+    folder_db_path = path
+    if not folder_db_path.startswith('/'):
+        folder_db_path = f"/{folder_db_path}"
+    while "//" in folder_db_path:
+        folder_db_path = folder_db_path.replace("//", "/")
+        
     require_owner_or_admin(folder_db_path, db, user)
+    
     #  Secure full path
     abs_path = os.path.abspath(os.path.join(BASE_DIR, path.strip("/")))
 
     if not abs_path.startswith(BASE_DIR):
         raise HTTPException(status_code=400, detail="Invalid path")
 
+    # Check if folder exists in filesystem
     if not os.path.exists(abs_path) or not os.path.isdir(abs_path):
-        raise HTTPException(status_code=404, detail="Folder not found")
+        # If folder is missing on disk but exists in DB, we can clean up DB entries
+        folder_in_db = db.query(File).filter(File.path == folder_db_path, File.is_folder == True).first()
+        if folder_in_db:
+            # Delete DB entries since filesystem entries are already gone
+            items_to_delete = db.query(File).filter(
+                (File.path == folder_db_path) | 
+                (File.path.startswith(folder_db_path + "/"))
+            ).all()
+            
+            print(f"Folder missing on disk but found in DB. Cleaning up {len(items_to_delete)} database entries.")
+            for item in items_to_delete:
+                print(f"  - Deleting DB entry: {item.id}: {item.path} ({item.name})")
+                db.delete(item)
+            
+            db.commit()
+            log_activity(db, user.id, action="Database Cleanup", target_path=folder_db_path)
+            return {"message": "Folder entries removed from database"}
+        else:
+            raise HTTPException(status_code=404, detail="Folder not found")
 
     #  Warn if folder is not empty and force is not set
     if os.listdir(abs_path) and not force:
@@ -160,8 +245,29 @@ def delete_folder(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error deleting folder: {str(e)}")
 
-    #  Remove metadata from database
-    db.query(File).filter(File.path == f"/{path.strip('/')}").delete()
+    # Normalize and prepare folder path for DB queries
+    folder_db_path = path
+    if not folder_db_path.startswith('/'):
+        folder_db_path = f"/{folder_db_path}"
+    
+    # Make sure no double slashes remain
+    while "//" in folder_db_path:
+        folder_db_path = folder_db_path.replace("//", "/")
+        
+    print(f"Deleting folder: {folder_db_path} (Original path: {path})")
+    
+    # Delete both the folder and all its contents from DB
+    items_to_delete = db.query(File).filter(
+        (File.path == folder_db_path) | 
+        (File.path.startswith(folder_db_path + "/"))
+    ).all()
+    
+    # Log what we're deleting
+    print(f"Found {len(items_to_delete)} items to delete:")
+    for item in items_to_delete:
+        print(f"  - {item.id}: {item.path} ({item.name})")
+        db.delete(item)
+    
     db.commit()
     log_activity(db, user.id, action="Delete Folder", target_path=path)
     return {"message": "Folder deleted successfully"}
@@ -203,15 +309,49 @@ def move_folder(
     os.rename(src, new_folder_path)
 
     #  Update DB paths recursively
-    affected = db.query(FileModel).filter(FileModel.path.startswith(data.source_path)).all()
+    source_db_path = data.source_path
+    if not source_db_path.startswith('/'):
+        source_db_path = f"/{source_db_path}"
+    while "//" in source_db_path:
+        source_db_path = source_db_path.replace("//", "/")
+        
+    dest_db_path = data.destination_path
+    if not dest_db_path.startswith('/'):
+        dest_db_path = f"/{dest_db_path}"
+    while "//" in dest_db_path:
+        dest_db_path = dest_db_path.replace("//", "/")
+        
+    folder_name = os.path.basename(source_db_path.rstrip("/"))
+    
+    # Calculate new folder path
+    new_folder_db_path = os.path.join(dest_db_path, folder_name).replace("\\", "/")
+    # Normalize path
+    while "//" in new_folder_db_path:
+        new_folder_db_path = new_folder_db_path.replace("//", "/")
+    
+    print(f"Moving folder from {source_db_path} to {new_folder_db_path}")
+    
+    # Update all affected items
+    affected = db.query(FileModel).filter(
+        (FileModel.path == source_db_path) | 
+        (FileModel.path.startswith(source_db_path + "/"))
+    ).all()
+    
+    print(f"Found {len(affected)} items to update:")
     for item in affected:
-        relative_suffix = item.path[len(data.source_path):]
-        item.path = os.path.join(data.destination_path, os.path.basename(src) + relative_suffix).replace("\\", "/")
+        old_path = item.path
+        if item.path == source_db_path:
+            # This is the main folder
+            item.path = new_folder_db_path
+        else:
+            # This is a child item
+            relative_suffix = item.path[len(source_db_path):]
+            item.path = (new_folder_db_path + relative_suffix).replace("\\", "/")
         item.modified_at = datetime.utcnow()
+        print(f"  - {item.id}: {old_path} -> {item.path}")
 
     db.commit()
-    log_activity(db, user.id, action="Folder Moved", target_path=os.path.join(data.destination_path, os.path.basename(src))
-)
+    log_activity(db, user.id, action="Folder Moved", target_path=new_folder_db_path)
     return {"message": "Folder moved successfully", "new_path": os.path.join(data.destination_path, os.path.basename(src))}
 
 # Upload a folder via multiple files with relative paths (best practice)
@@ -235,53 +375,98 @@ async def upload_folder_structure(
     created_folders = set()
     created_files = []
     for upload_file, relpath in zip(files, relpaths):
+        # Sanitize the relative path to prevent traversal attacks
         safe_relpath = relpath.strip().replace("..", "").replace("\\", "/").lstrip("/")
         dest_path = os.path.abspath(os.path.join(BASE_DIR, parent_path.strip("/"), safe_relpath))
+        
+        # Security check
         if not dest_path.startswith(BASE_DIR):
             raise HTTPException(status_code=400, detail=f"Invalid file path: {relpath}")
+            
         dest_dir = os.path.dirname(dest_path)
         # Track all folders in the path
         rel_folder_parts = safe_relpath.split("/")[:-1]
         for i in range(1, len(rel_folder_parts)+1):
-            folder_path = "/" + "/".join([parent_path.strip("/")] + rel_folder_parts[:i]).replace("//", "/")
+            folder_path = "/" + "/".join([parent_path.strip("/")] + rel_folder_parts[:i])
+            # Remove any double slashes
+            while "//" in folder_path:
+                folder_path = folder_path.replace("//", "/")
             created_folders.add(folder_path)
+            
+        # Create directory if it doesn't exist
         if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
-        with open(dest_path, "wb") as f:
-            content = await upload_file.read()
-            f.write(content)
-        # Track file for DB
-        file_db_path = "/" + os.path.join(parent_path.strip("/"), safe_relpath).replace("\\", "/").replace("//", "/")
-        created_files.append((os.path.basename(dest_path), file_db_path, os.path.getsize(dest_path)))
+            try:
+                os.makedirs(dest_dir)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to create directory {dest_dir}: {str(e)}")
+            
+        # Write file to disk with proper error handling
+        try:
+            with open(dest_path, "wb") as f:
+                # Read in chunks to avoid memory issues with large files
+                content = await upload_file.read()
+                f.write(content)
+            # Get file size after successful write
+            file_size = os.path.getsize(dest_path)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to write file {safe_relpath}: {str(e)}")
+        # Prepare file record for DB - ensure consistent path format
+        file_db_path = "/" + os.path.join(parent_path.strip("/"), safe_relpath).replace("\\", "/")
+        # Remove any double slashes
+        while "//" in file_db_path:
+            file_db_path = file_db_path.replace("//", "/")
+            
+        created_files.append((os.path.basename(dest_path), file_db_path, file_size))
 
     # Add folders to DB (if not already present)
     for folder_path in sorted(created_folders, key=lambda x: x.count("/")):
-        if not db.query(File).filter(File.path == folder_path, File.is_folder == True).first():
+        # Ensure consistent path format
+        normalized_folder_path = folder_path
+        while "//" in normalized_folder_path:
+            normalized_folder_path = normalized_folder_path.replace("//", "/")
+            
+        existing_folder = db.query(File).filter(File.path == normalized_folder_path, File.is_folder == True).first()
+        if not existing_folder:
+            folder_name = os.path.basename(normalized_folder_path.rstrip("/")) or parent_path.strip("/")
             db.add(File(
-                name=os.path.basename(folder_path.rstrip("/")) or parent_path.strip("/"),
-                path=folder_path,
+                name=folder_name,
+                path=normalized_folder_path,
                 is_folder=True,
                 size=0,
                 owner_id=user.id,
                 created_at=datetime.utcnow(),
                 modified_at=datetime.utcnow()
             ))
+        else:
+            # Update the modified_at timestamp for existing folders
+            existing_folder.modified_at = datetime.utcnow()
+            
     # Add files to DB
     for name, path, size in created_files:
-        if not db.query(File).filter(File.path == path, File.is_folder == False).first():
+        # Ensure consistent path format
+        normalized_path = path
+        while "//" in normalized_path:
+            normalized_path = normalized_path.replace("//", "/")
+            
+        existing_file = db.query(File).filter(File.path == normalized_path, File.is_folder == False).first()
+        if not existing_file:
             db.add(File(
                 name=name,
-                path=path,
+                path=normalized_path,
                 is_folder=False,
                 size=size,
                 owner_id=user.id,
                 created_at=datetime.utcnow(),
                 modified_at=datetime.utcnow()
             ))
+        else:
+            # Update existing file
+            existing_file.size = size
+            existing_file.modified_at = datetime.utcnow()
     db.commit()
     from utils import log_activity
     log_activity(db, user.id, action="Upload Folder Structure", target_path=parent_path)
-    return {"message": "Folder structure uploaded successfully"}
+    return {"message": "Folder structure uploaded successfully", "created_folders": list(created_folders), "created_files": len(created_files)}
 
 
 

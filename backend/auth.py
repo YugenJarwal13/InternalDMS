@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 480  # Increase to 8 hours for better user experience
 
 # ✅ Set up password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

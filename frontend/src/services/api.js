@@ -13,14 +13,13 @@ export const loginUser = async ({ email, password }) => {
   });
 
   if (!response.ok) {
-    const data = await response.json();
-    throw new Error(data.detail || 'Login failed');
+    // Parse error response
+    const errorData = await response.json().catch(() => ({ detail: 'Login failed' }));
+    throw new Error(errorData.detail || 'Login failed');
   }
 
+  // Return data but don't store token here - let the UserContext handle that
   const data = await response.json();
-
-  // Optional: If you want to store bearer token immediately
-  localStorage.setItem('accessToken', data.access_token);
   return data;
 };
 

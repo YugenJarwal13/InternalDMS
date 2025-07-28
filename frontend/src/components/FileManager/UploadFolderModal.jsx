@@ -5,6 +5,8 @@ const UploadFolderModal = ({ isOpen, onClose, parentPath, onUploadSuccess }) => 
   const inputRef = useRef();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedFolderName, setSelectedFolderName] = useState('');
+  const [fileCount, setFileCount] = useState(0);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -16,29 +18,91 @@ const UploadFolderModal = ({ isOpen, onClose, parentPath, onUploadSuccess }) => 
       setLoading(false);
       return;
     }
+    
+    // Get the base folder name from the first file's path
+    const firstPath = files[0].webkitRelativePath || '';
+    const baseFolder = firstPath.split('/')[0] || '';
+    
     // Prepare FormData with files and their relative paths
     const formData = new FormData();
     formData.append('parent_path', parentPath);
+    
+    console.log(`Uploading ${files.length} files to ${parentPath}`);
+    console.log(`Base folder: ${baseFolder}`);
+    
+    // Check if we have relative paths
+    let hasRelativePaths = false;
+    
     for (let file of files) {
+      // Check if browser supports webkitRelativePath
+      const relativePath = file.webkitRelativePath || file.name;
+      hasRelativePaths = hasRelativePaths || (file.webkitRelativePath && file.webkitRelativePath !== '');
+      
       formData.append('files', file);
-      formData.append('relpaths', file.webkitRelativePath || file.name);
+      formData.append('relpaths', relativePath);
+      console.log(`Adding file: ${relativePath}`);
     }
+    
+    if (!hasRelativePaths) {
+      console.warn("Browser might not support directory upload properly - no relative paths found");
+    }
+    
     try {
-      await authFetch('/api/folders/upload-folder-structure', {
+      console.log('Sending upload request...');
+      const response = await authFetch('/api/folders/upload-folder-structure', {
         method: 'POST',
         body: formData,
         headers: {}, // Let browser set Content-Type
       });
+      console.log('Upload response:', response);
+      
+      if (response.created_files === 0) {
+        setError('No files were uploaded. Please make sure you selected a folder with files.');
+        setLoading(false);
+        return;
+      }
+      
       onUploadSuccess && onUploadSuccess();
       onClose();
     } catch (err) {
-      setError('Upload failed');
+      console.error('Upload error:', err);
+      let errorMessage = 'Upload failed';
+      
+      if (err.message) {
+        errorMessage += ': ' + err.message;
+      }
+      
+      // Special case for common errors
+      if (err.message && err.message.includes('413')) {
+        errorMessage = 'Upload failed: Files are too large. Please try uploading smaller files.';
+      } else if (err.message && err.message.includes('401')) {
+        errorMessage = 'Upload failed: You need to log in again.';
+      } else if (err.message && err.message.includes('403')) {
+        errorMessage = 'Upload failed: You do not have permission to upload to this folder.';
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   if (!isOpen) return null;
+  
+  // Handle directory selection
+  const handleFolderSelect = (e) => {
+    const files = e.target.files;
+    if (files.length > 0) {
+      // Extract folder name from the first file's path
+      const firstPath = files[0].webkitRelativePath || '';
+      const folderName = firstPath.split('/')[0] || 'Unknown Folder';
+      setSelectedFolderName(folderName);
+      setFileCount(files.length);
+    } else {
+      setSelectedFolderName('');
+      setFileCount(0);
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
@@ -53,8 +117,10 @@ const UploadFolderModal = ({ isOpen, onClose, parentPath, onUploadSuccess }) => 
             id="upload-folder-input"
             webkitdirectory="true"
             directory="true"
+            mozdirectory="true"
             multiple
             className="hidden"
+            onChange={handleFolderSelect}
           />
           <label
             htmlFor="upload-folder-input"
@@ -62,11 +128,17 @@ const UploadFolderModal = ({ isOpen, onClose, parentPath, onUploadSuccess }) => 
           >
             Choose Folder
           </label>
-          <span className="block text-gray-500 text-sm mb-2">
-            {inputRef.current && inputRef.current.files.length > 0
-              ? Array.from(inputRef.current.files).map(f => f.webkitRelativePath || f.name).join(", ")
-              : "No folder selected"}
-          </span>
+          <div className="block text-gray-700 text-sm mb-2">
+            {selectedFolderName ? (
+              <div>
+                <p><strong>Selected folder:</strong> {selectedFolderName}</p>
+                <p><strong>Files:</strong> {fileCount}</p>
+                <p><strong>Destination:</strong> {parentPath || '/'}</p>
+              </div>
+            ) : (
+              "No folder selected"
+            )}
+          </div>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="px-4 py-2 rounded bg-gray-200 text-gray-700">Cancel</button>
             <button type="submit" disabled={loading} className="px-4 py-2 rounded bg-blue-600 text-white">{loading ? 'Uploading...' : 'Upload'}</button>

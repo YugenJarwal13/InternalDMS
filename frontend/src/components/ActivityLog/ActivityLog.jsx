@@ -47,7 +47,10 @@ const ActivityLog = () => {
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-6">Activity Log</h2>
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-bold">Activity Log</h2>
+        <span className="text-blue-600 font-semibold ml-4">[Most recent ones]</span>
+      </div>
       {loading && <div>Loading...</div>}
       {error && <div className="text-red-500">{error}</div>}
       <div className="overflow-x-auto">
@@ -66,7 +69,7 @@ const ActivityLog = () => {
                 <td colSpan={5} className="text-center text-gray-500 py-4">No activity found.</td>
               </tr>
             )}
-            {logs.map((log) => (
+            {logs.slice(0, 20).map((log) => (
               <tr key={log.id}>
                 <td className="px-4 py-2 border">{formatToLocalTime(log.timestamp)}</td>
                 <td className="px-4 py-2 border">{log.user_email || log.user_id}</td>

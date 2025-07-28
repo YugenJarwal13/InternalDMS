@@ -33,7 +33,7 @@ app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(folders.router, prefix="/api/folders", tags=["Folders"])
 app.include_router(remote.router)
 app.include_router(logs.router, prefix="/api", tags=["Logs"])
-app.include_router(authorize.router)
+app.include_router(authorize.router, prefix="/api", tags=["Authorization"])
 
 
 @app.get("/")

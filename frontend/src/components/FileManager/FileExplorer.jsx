@@ -46,7 +46,7 @@ const downloadFile = async (path, name) => {
   window.URL.revokeObjectURL(url);
 };
 
-const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
+const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolderSelect = () => {} }) => {
   const [expanded, setExpanded] = useState(isRoot);
   const [children, setChildren] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -98,6 +98,8 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
     if (!expanded) {
       setExpanded(true);
       await fetchChildren();
+      // Update current folder in parent component for search/filter
+      onFolderSelect(path);
     } else {
       setExpanded(false);
     }
@@ -113,11 +115,13 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
 
   const handleDeleteFolder = async (force = false) => {
     try {
+      console.log(`Attempting to delete folder: ${path} with force=${force}`);
       const res = await authFetch('/api/folders/delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ path, force }),
       });
+      console.log('Delete response:', res);
 
       if (res.warning && res.can_proceed && !force) {
         const confirmDelete = window.confirm(res.warning);
@@ -130,21 +134,25 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
       onAction();
       setShowDelete(false);
     } catch (err) {
-      alert('Failed to delete folder');
+      console.error('Delete folder error:', err);
+      alert(`Failed to delete folder: ${err.message || 'Unknown error'}`);
     }
   };
 
   const handleMoveFolder = async (destination) => {
     try {
-      await authFetch('/api/folders/move', {
+      console.log(`Attempting to move folder from ${path} to ${destination}`);
+      const response = await authFetch('/api/folders/move', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source_path: path, destination_path: destination }),
       });
+      console.log('Move response:', response);
       await fetchChildren();
       setShowMove(false);
     } catch (err) {
-      alert('Failed to move folder');
+      console.error('Move folder error:', err);
+      alert(`Failed to move folder: ${err.message || 'Unknown error'}`);
     }
   };
 
@@ -244,7 +252,13 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { } }) => {
           {children.length === 0 && <li className="text-gray-400 ml-4 italic">Empty folder</li>}
           {children.map((item) =>
             item.is_folder ? (
-              <FolderNode key={item.path} path={item.path} name={item.name} onAction={fetchChildren} />
+              <FolderNode 
+                key={item.path} 
+                path={item.path} 
+                name={item.name} 
+                onAction={fetchChildren} 
+                onFolderSelect={onFolderSelect}
+              />
             ) : (
               <FileNode key={item.path} item={item} parentPath={path} onAction={fetchChildren} />
             )
@@ -369,15 +383,227 @@ const FileNode = ({ item, parentPath, onAction }) => {
   );
 };
 
+
 const FileExplorer = () => {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState({ 
+    is_folder: "", 
+    min_size: "", 
+    max_size: "",
+    owner_email: "",
+    created_after: "",
+    created_before: ""
+  });
+  const [results, setResults] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [currentFolder, setCurrentFolder] = useState("/");
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!search.trim()) return;
+    
+    setLoading(true);
+    setError("");
+    try {
+      const data = await authFetch(`/api/files/disk-search?query=${encodeURIComponent(search)}&parent_path=${encodeURIComponent(currentFolder)}`);
+      setResults(data);
+    } catch (err) {
+      setError("Search failed: " + (err.message || "Unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFilter = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const params = [];
+    if (filter.is_folder !== "") params.push(`is_folder=${filter.is_folder}`);
+    if (filter.min_size) params.push(`min_size=${filter.min_size}`);
+    if (filter.max_size) params.push(`max_size=${filter.max_size}`);
+    if (filter.owner_email) params.push(`owner_email=${encodeURIComponent(filter.owner_email)}`);
+    if (filter.created_after) params.push(`created_after=${encodeURIComponent(filter.created_after)}`);
+    if (filter.created_before) params.push(`created_before=${encodeURIComponent(filter.created_before)}`);
+    
+    const queryStr = params.length ? "&" + params.join("&") : "";
+    try {
+      const data = await authFetch(`/api/files/disk-filter?parent_path=${encodeURIComponent(currentFolder)}${queryStr}`);
+      setResults(data);
+    } catch (err) {
+      setError("Filter failed: " + (err.message || "Unknown error"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearResults = () => {
+    setResults(null);
+    setSearch("");
+    setFilter({ 
+      is_folder: "", 
+      min_size: "", 
+      max_size: "",
+      owner_email: "",
+      created_after: "",
+      created_before: ""
+    });
+    setError("");
+  };
+
+  const updateCurrentFolder = (path) => {
+    setCurrentFolder(path);
+    // Clear any search/filter results when changing folders
+    if (results) {
+      clearResults();
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto mt-8">
       <h3 className="mb-4 font-bold text-2xl text-blue-800 flex items-center gap-2">
         <HiFolder className="w-7 h-7 text-blue-700" /> File Explorer
       </h3>
-      <ul className="bg-white rounded-xl shadow p-4 border border-blue-100">
-        <FolderNode path="/" name="Root" isRoot />
-      </ul>
+      <form onSubmit={handleSearch} className="flex gap-2 mb-2">
+        <input
+          type="text"
+          placeholder="Search files or folders (disk)"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="border border-blue-200 rounded px-3 py-1 flex-1 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        />
+        <button type="submit" className="bg-blue-600 text-white px-4 py-1 rounded hover:bg-blue-700">Search</button>
+        {results && <button type="button" onClick={clearResults} className="ml-2 px-3 py-1 rounded bg-gray-200 text-gray-700">Clear</button>}
+      </form>
+      
+      <div className="bg-gray-50 p-3 rounded-lg mb-4 border border-gray-200">
+        <h4 className="font-medium text-gray-700 mb-2">Advanced Filters</h4>
+        <form onSubmit={handleFilter} className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">File Type</label>
+            <select
+              value={filter.is_folder}
+              onChange={e => setFilter(f => ({ ...f, is_folder: e.target.value }))}
+              className="w-full border border-blue-200 rounded px-2 py-1 text-sm"
+            >
+              <option value="">All</option>
+              <option value="true">Folders</option>
+              <option value="false">Files</option>
+            </select>
+          </div>
+          
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Owner Email</label>
+            <input
+              type="email"
+              placeholder="Filter by owner"
+              value={filter.owner_email}
+              onChange={e => setFilter(f => ({ ...f, owner_email: e.target.value }))}
+              className="w-full border border-blue-200 rounded px-2 py-1 text-sm"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Min Size (bytes)</label>
+            <input
+              type="number"
+              min="0"
+              placeholder="Minimum size"
+              value={filter.min_size}
+              onChange={e => setFilter(f => ({ ...f, min_size: e.target.value }))}
+              className="w-full border border-blue-200 rounded px-2 py-1 text-sm"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Max Size (bytes)</label>
+            <input
+              type="number"
+              min="0"
+              placeholder="Maximum size"
+              value={filter.max_size}
+              onChange={e => setFilter(f => ({ ...f, max_size: e.target.value }))}
+              className="w-full border border-blue-200 rounded px-2 py-1 text-sm"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Created After</label>
+            <input
+              type="datetime-local"
+              value={filter.created_after}
+              onChange={e => setFilter(f => ({ ...f, created_after: e.target.value }))}
+              className="w-full border border-blue-200 rounded px-2 py-1 text-sm"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm text-gray-600 mb-1">Created Before</label>
+            <input
+              type="datetime-local"
+              value={filter.created_before}
+              onChange={e => setFilter(f => ({ ...f, created_before: e.target.value }))}
+              className="w-full border border-blue-200 rounded px-2 py-1 text-sm"
+            />
+          </div>
+          
+          <div className="col-span-2 flex justify-end gap-2 mt-2">
+            <button type="button" onClick={clearResults} className="px-3 py-1 rounded bg-gray-200 text-gray-700 text-sm">Clear</button>
+            <button type="submit" className="bg-blue-500 text-white px-4 py-1 rounded hover:bg-blue-600 text-sm">Apply Filters</button>
+          </div>
+        </form>
+      </div>
+      {error && <div className="text-red-500 mb-2">{error}</div>}
+      {loading && <div className="text-gray-500 mb-2">Loading...</div>}
+      {results ? (
+        <ul className="bg-white rounded-xl shadow p-4 border border-blue-100">
+          {results.length === 0 && <li className="text-gray-400 italic">No results found.</li>}
+          {results.map(item => (
+            <li key={item.path} className="flex flex-col px-2 py-1 rounded-lg group hover:bg-blue-50 transition-all">
+              <div className="flex items-center gap-2">
+                {item.is_folder ? <HiFolder className="w-5 h-5 text-blue-700" /> : <HiOutlineDocument className="w-5 h-5 text-gray-500" />}
+                <span className="truncate flex-1 font-medium">{item.name}</span>
+                {!item.is_folder && (
+                  <span className="text-xs text-gray-500">{item.size ? `${(item.size / 1024).toFixed(1)} KB` : ''}</span>
+                )}
+                {!item.is_folder && (
+                  <button 
+                    onClick={() => downloadFile(item.path, item.name)} 
+                    className="p-1 rounded hover:bg-blue-100" 
+                    title="Download"
+                  >
+                    <HiUpload className="w-5 h-5 text-blue-600" />
+                  </button>
+                )}
+              </div>
+              
+              {/* Enhanced metadata display */}
+              <div className="ml-7 text-xs text-gray-500 mt-1">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                  {item.path && <div><span className="font-semibold">Path:</span> {item.path}</div>}
+                  {item.owner && <div><span className="font-semibold">Owner:</span> {item.owner}</div>}
+                  {item.created_at && (
+                    <div><span className="font-semibold">Created:</span> {formatToLocalTime(item.created_at)}</div>
+                  )}
+                  {item.modified_at && (
+                    <div><span className="font-semibold">Modified:</span> {formatToLocalTime(item.modified_at)}</div>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul className="bg-white rounded-xl shadow p-4 border border-blue-100">
+          <FolderNode 
+            path="/" 
+            name="Root" 
+            isRoot 
+            onFolderSelect={updateCurrentFolder}
+          />
+        </ul>
+      )}
     </div>
   );
 };

@@ -11,23 +11,27 @@ const RenameModal = ({ isOpen, onClose, path, currentName, isFolder, onRenameSuc
     setError('');
     setLoading(true);
     try {
+      console.log(`Attempting to rename ${isFolder ? 'folder' : 'file'} at path: ${path} to ${newName}`);
+      let response;
       if (isFolder) {
-        await authFetch('/api/folders/rename', {
+        response = await authFetch('/api/folders/rename', {
           method: 'PUT',
           body: JSON.stringify({ old_path: path, new_name: newName }),
           headers: { 'Content-Type': 'application/json' },
         });
       } else {
-        await authFetch('/api/files/rename', {
+        response = await authFetch('/api/files/rename', {
           method: 'PUT',
           body: JSON.stringify({ path, new_name: newName }),
           headers: { 'Content-Type': 'application/json' },
         });
       }
+      console.log('Rename response:', response);
       onRenameSuccess();
       onClose();
     } catch (err) {
-      setError('Rename failed');
+      console.error('Rename error:', err);
+      setError(`Rename failed: ${err.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
