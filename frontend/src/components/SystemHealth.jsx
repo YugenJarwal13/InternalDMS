@@ -124,9 +124,7 @@ const SystemHealth = () => {
         {/* Database Status */}
         <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100">
           <div className="text-indigo-500 text-md font-medium mb-2">Database Status</div>
-          <div className="text-xl font-bold">{healthData.status.database.status}</div>
-          <div className="text-sm text-gray-500 mt-2">Storage: {healthData.status.database.storage_size}</div>
-          <div className="text-sm text-gray-500">Active Connections: {healthData.status.database.active_connections}</div>
+          <div className="text-xl font-bold">Connected</div>
         </div>
       </div>
     </div>

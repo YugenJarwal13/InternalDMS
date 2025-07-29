@@ -32,18 +32,30 @@ const Dashboard = () => {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Welcome to the DMS Dashboard</h1>
-        <div className="flex items-center space-x-4">
-          <div className="text-sm">
-            <span className="font-medium">Logged in as:</span> {user.email} ({user.role})
+      {/* Welcome Header */}
+      <div className="mb-8 text-center">
+        <h1 className="text-4xl font-bold text-gray-800 mb-4">Welcome to the DMS Dashboard</h1>
+        
+        {/* User Info Box */}
+        <div className="inline-flex items-center bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-6 py-3 shadow-sm">
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-sm text-gray-600">Logged in as:</span>
+            </div>
+            <div className="text-sm font-semibold text-gray-800">
+              {user.email}
+            </div>
+            <div className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+              {user.role}
+            </div>
+            <button
+              onClick={handleLogout}
+              className="ml-4 px-3 py-1 bg-red-500 text-white text-sm rounded hover:bg-red-600 transition-colors"
+            >
+              Logout
+            </button>
           </div>
-          <button
-            onClick={handleLogout}
-            className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600"
-          >
-            Logout
-          </button>
         </div>
       </div>
       

@@ -69,7 +69,7 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
       });
       return true;
     } catch (err) {
-      if (err.code === 403) setShowNotAuth(true);
+      if (err.status === 403) setShowNotAuth(true);
       return false;
     }
   };
@@ -158,91 +158,98 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
 
   return (
     <li className="ml-2">
-      <div className={`flex items-center gap-2 px-2 py-1 rounded-lg group hover:bg-blue-50 transition-all ${isRoot ? 'font-bold text-lg bg-blue-100' : ''}`}>
-        <button onClick={handleToggle} className="focus:outline-none" title={expanded ? 'Collapse' : 'Expand'}>
-          {expanded ? <HiChevronDown className="inline w-5 h-5 text-blue-700" /> : <HiChevronRight className="inline w-5 h-5 text-blue-700" />}
-        </button>
-        <HiFolder className="w-6 h-6 text-blue-700" />
-        <span className="truncate flex-1">{name}</span>
-        <button
-          onClick={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (showCreateFolder) return;
-            const ok = await checkAuth('create_folder');
-            if (ok) setShowCreateFolder(true);
-          }}
-          className="p-1 rounded hover:bg-blue-100"
-          title="New Folder"
-        >
-          <HiPlus className="w-5 h-5 text-blue-600" />
-        </button>
-        <button
-          onClick={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (showUpload) return;
-            const ok = await checkAuth('upload');
-            if (ok) setShowUpload(true);
-          }}
-          className="p-1 rounded hover:bg-green-100"
-          title="Upload Files"
-        >
-          <HiUpload className="w-5 h-5 text-green-600" />
-        </button>
-        <button
-          onClick={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (showUploadFolder) return;
-            const ok = await checkAuth('upload');
-            if (ok) setShowUploadFolder(true);
-          }}
-          className="p-1 rounded hover:bg-green-200"
-          title="Upload Folder"
-        >
-          <span role="img" aria-label="Upload Folder" className="w-5 h-5 text-green-700">📁⤴️</span>
-        </button>
-        <button
-          onClick={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (showRename) return;
-            const ok = await checkAuth('rename');
-            if (ok) setShowRename(true);
-          }}
-          className="p-1 rounded hover:bg-yellow-100"
-          title="Rename"
-        >
-          <HiPencil className="w-5 h-5 text-yellow-600" />
-        </button>
-        <button
-          onClick={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (showMove) return;
-            const ok = await checkAuth('move');
-            if (ok) setShowMove(true);
-          }}
-          className="p-1 rounded hover:bg-purple-100"
-          title="Move"
-        >
-          <HiArrowsRightLeft className="w-5 h-5 text-purple-600" />
-        </button>
-        <button
-          onClick={async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (showDelete) return;
-            const ok = await checkAuth('delete');
-            if (ok) setShowDelete(true);
-          }}
-          className="p-1 rounded hover:bg-red-100"
-          title="Delete"
-        >
-          <HiTrash className="w-5 h-5 text-red-500" />
-        </button>
-        {loading && <span className="ml-2 text-xs text-gray-400">Loading...</span>}
+      <div 
+        className={`flex items-center gap-2 px-2 py-1 rounded-lg group hover:bg-blue-50 transition-all cursor-pointer ${isRoot ? 'font-bold text-lg bg-blue-100' : ''}`}
+        onClick={handleToggle}
+      >
+        <div className="flex items-center gap-2 flex-1">
+          <div className="focus:outline-none" title={expanded ? 'Collapse' : 'Expand'}>
+            {expanded ? <HiChevronDown className="inline w-5 h-5 text-blue-700" /> : <HiChevronRight className="inline w-5 h-5 text-blue-700" />}
+          </div>
+          <HiFolder className="w-6 h-6 text-blue-700" />
+          <span className="truncate flex-1">{name}</span>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (showCreateFolder) return;
+              const ok = await checkAuth('create_folder');
+              if (ok) setShowCreateFolder(true);
+            }}
+            className="p-1 rounded hover:bg-blue-100"
+            title="New Folder"
+          >
+            <HiPlus className="w-5 h-5 text-blue-600" />
+          </button>
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (showUpload) return;
+              const ok = await checkAuth('upload');
+              if (ok) setShowUpload(true);
+            }}
+            className="p-1 rounded hover:bg-green-100"
+            title="Upload Files"
+          >
+            <HiUpload className="w-5 h-5 text-green-600" />
+          </button>
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (showUploadFolder) return;
+              const ok = await checkAuth('upload');
+              if (ok) setShowUploadFolder(true);
+            }}
+            className="p-1 rounded hover:bg-green-200"
+            title="Upload Folder"
+          >
+            <span role="img" aria-label="Upload Folder" className="w-5 h-5 text-green-700">📁⤴️</span>
+          </button>
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (showRename) return;
+              const ok = await checkAuth('rename');
+              if (ok) setShowRename(true);
+            }}
+            className="p-1 rounded hover:bg-yellow-100"
+            title="Rename"
+          >
+            <HiPencil className="w-5 h-5 text-yellow-600" />
+          </button>
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (showMove) return;
+              const ok = await checkAuth('move');
+              if (ok) setShowMove(true);
+            }}
+            className="p-1 rounded hover:bg-purple-100"
+            title="Move"
+          >
+            <HiArrowsRightLeft className="w-5 h-5 text-purple-600" />
+          </button>
+          <button
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (showDelete) return;
+              const ok = await checkAuth('delete');
+              if (ok) setShowDelete(true);
+            }}
+            className="p-1 rounded hover:bg-red-100"
+            title="Delete"
+          >
+            <HiTrash className="w-5 h-5 text-red-500" />
+          </button>
+          {loading && <span className="ml-2 text-xs text-gray-400">Loading...</span>}
+        </div>
       </div>
 
       {error && <div className="text-red-500 ml-6">{error}</div>}
@@ -292,7 +299,7 @@ const FileNode = ({ item, parentPath, onAction }) => {
       });
       return true;
     } catch (err) {
-      if (err.code === 403) setShowNotAuth(true);
+      if (err.status === 403) setShowNotAuth(true);
       return false;
     }
   };

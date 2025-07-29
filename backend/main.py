@@ -32,7 +32,7 @@ app.add_middleware(
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(files.router, prefix="/api/files", tags=["Files"])
 app.include_router(folders.router, prefix="/api/folders", tags=["Folders"])
-app.include_router(remote.router)
+app.include_router(remote.router, prefix="/api", tags=["Remote"])
 app.include_router(logs.router, prefix="/api", tags=["Logs"])
 app.include_router(authorize.router, prefix="/api", tags=["Authorization"])
 app.include_router(system.router, prefix="/api/system", tags=["System"])

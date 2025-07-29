@@ -55,10 +55,19 @@ async def download_from_remote(
     path: str = Query(...)
 ):
     try:
-        return await send_request(
+        response = await send_request(
             method="GET",
             url=f"{remote_base_url}/download",
             params={"path": path}
+        )
+        # For downloads, send_request returns the httpx response object
+        from fastapi.responses import StreamingResponse
+        return StreamingResponse(
+            response.iter_bytes(),
+            media_type=response.headers.get('content-type', 'application/octet-stream'),
+            headers={
+                'Content-Disposition': response.headers.get('content-disposition', f'attachment; filename="{path.split("/")[-1]}"')
+            }
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Remote download failed: {str(e)}")
@@ -97,6 +106,26 @@ async def move_on_remote(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Remote move failed: {str(e)}")
+
+# Proxy: Create folder on remote server
+@router.post("/create-folder")
+async def create_folder_on_remote(
+    remote_base_url: str = Form(...),
+    parent_path: str = Form(...),
+    folder_name: str = Form(...)
+):
+    try:
+        return await send_request(
+            method="POST",
+            url=f"{remote_base_url}/create-folder",
+            data={
+                "parent_path": parent_path,
+                "folder_name": folder_name
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Remote folder creation failed: {str(e)}")
+
 
 # Proxy: Search remote files/folders
 @router.get("/search")
