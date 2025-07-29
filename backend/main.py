@@ -7,6 +7,7 @@ from routers import files, folders, users
 from routers import remote
 from routers import logs
 from routers import authorize
+from routers import system
 
 app = FastAPI()
 
@@ -34,6 +35,7 @@ app.include_router(folders.router, prefix="/api/folders", tags=["Folders"])
 app.include_router(remote.router)
 app.include_router(logs.router, prefix="/api", tags=["Logs"])
 app.include_router(authorize.router, prefix="/api", tags=["Authorization"])
+app.include_router(system.router, prefix="/api/system", tags=["System"])
 
 
 @app.get("/")

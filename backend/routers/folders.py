@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import shutil
 from utils import log_activity
 from models import File, User
+from typing import Dict, List, Optional, Any
 
 router = APIRouter()
 
@@ -467,6 +468,86 @@ async def upload_folder_structure(
     from utils import log_activity
     log_activity(db, user.id, action="Upload Folder Structure", target_path=parent_path)
     return {"message": "Folder structure uploaded successfully", "created_folders": list(created_folders), "created_files": len(created_files)}
+
+
+# Statistics endpoint for dashboard
+@router.get("/statistics")
+def get_folder_statistics(
+    user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get folder statistics for dashboard display.
+    Returns folder name, owner, number of subfolders, and number of files.
+    Statistics are gathered from disk rather than just the database.
+    """
+    # Use the base storage directory as the root path
+    abs_root_path = BASE_DIR
+    
+    # Prepare result container
+    results = []
+    
+    # Start with immediate subfolders of the root path
+    for entry in os.scandir(abs_root_path):
+        if not entry.is_dir():
+            continue
+        
+        folder_stats = {
+            "folder_name": entry.name,
+            "path": "/" + os.path.relpath(entry.path, BASE_DIR).replace("\\", "/"),
+            "subfolder_count": 0,
+            "file_count": 0,
+            "total_size": 0,
+            "owner": None,
+            "owner_id": None
+        }
+        
+        # Get owner info from database
+        folder_db_path = folder_stats["path"]
+        db_record = db.query(File).filter(File.path == folder_db_path, File.is_folder == True).first()
+        if db_record:
+            folder_stats["owner_id"] = db_record.owner_id
+            owner = db.query(User).filter(User.id == db_record.owner_id).first()
+            if owner:
+                folder_stats["owner"] = owner.email
+        
+        # Walk the folder to count files and subfolders
+        for root, dirs, files in os.walk(entry.path):
+            folder_stats["subfolder_count"] += len(dirs)
+            folder_stats["file_count"] += len(files)
+            
+            # Calculate total size of files
+            for file in files:
+                file_path = os.path.join(root, file)
+                try:
+                    folder_stats["total_size"] += os.path.getsize(file_path)
+                except (FileNotFoundError, PermissionError):
+                    # Skip files that can't be accessed
+                    pass
+        
+        # Format total size for human readability
+        folder_stats["size_formatted"] = format_file_size(folder_stats["total_size"])
+        
+        results.append(folder_stats)
+    
+    # Log the statistics request
+    log_activity(db, user.id, action="View Folder Statistics", target_path="/")
+    
+    return {
+        "total_folders": len(results),
+        "statistics": sorted(results, key=lambda x: x["folder_name"])
+    }
+
+def format_file_size(size_bytes):
+    """Format file size from bytes to human-readable format."""
+    if size_bytes < 1024:
+        return f"{size_bytes} bytes"
+    elif size_bytes < 1024 * 1024:
+        return f"{size_bytes / 1024:.1f} KB"
+    elif size_bytes < 1024 * 1024 * 1024:
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+    else:
+        return f"{size_bytes / (1024 * 1024 * 1024):.1f} GB"
 
 
 
