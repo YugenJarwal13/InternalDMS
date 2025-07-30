@@ -16,7 +16,8 @@ from fastapi.encoders import jsonable_encoder
 
 router = APIRouter()
 
-BASE_STORAGE_PATH = os.path.abspath("storage")  # Root directory for file uploads
+# Storage configuration - use environment variable with fallback
+BASE_STORAGE_PATH = os.path.abspath(os.getenv("STORAGE_PATH", "storage"))
 
 # DISK-BASED SEARCH ENDPOINT
 @router.get("/disk-search")

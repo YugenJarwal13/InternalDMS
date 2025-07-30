@@ -14,8 +14,8 @@ from typing import Dict, List, Optional, Any
 
 router = APIRouter()
 
-#  Correct path to /backend/storage
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "storage"))
+#  Storage configuration - use environment variable with fallback to relative path
+BASE_DIR = os.path.abspath(os.getenv("STORAGE_PATH", os.path.join(os.path.dirname(__file__), "..", "storage")))
 
 
 @router.post("/create")
