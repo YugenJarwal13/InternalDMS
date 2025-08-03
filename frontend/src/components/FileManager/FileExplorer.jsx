@@ -106,11 +106,15 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
   };
 
   const handleUploadSuccess = async () => {
+    // Refresh both current view and parent view
     await fetchChildren();
+    onAction();
   };
 
   const handleRenameSuccess = async () => {
+    // Refresh both current view and parent view
     await fetchChildren();
+    onAction();
   };
 
   const handleDeleteFolder = async (force = false) => {
@@ -131,7 +135,9 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
         return;
       }
 
+      // Refresh parent folder view and current view
       onAction();
+      await fetchChildren();
       setShowDelete(false);
     } catch (err) {
       console.error('Delete folder error:', err);
@@ -148,7 +154,8 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
         body: JSON.stringify({ source_path: path, destination_path: destination }),
       });
       console.log('Move response:', response);
-      await fetchChildren();
+      // Refresh parent since this folder moved away
+      onAction();
       setShowMove(false);
     } catch (err) {
       console.error('Move folder error:', err);
@@ -405,6 +412,12 @@ const FileExplorer = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [currentFolder, setCurrentFolder] = useState("/");
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Function to refresh the folder tree
+  const refreshFolderTree = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
 
   const handleSearch = async (e) => {
     e.preventDefault();
@@ -604,9 +617,11 @@ const FileExplorer = () => {
       ) : (
         <ul className="bg-white rounded-xl shadow p-4 border border-blue-100">
           <FolderNode 
+            key={refreshTrigger}
             path="/" 
             name="Root" 
             isRoot 
+            onAction={refreshFolderTree}
             onFolderSelect={updateCurrentFolder}
           />
         </ul>

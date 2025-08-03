@@ -388,7 +388,12 @@ async def upload_folder_structure(
         # Track all folders in the path
         rel_folder_parts = safe_relpath.split("/")[:-1]
         for i in range(1, len(rel_folder_parts)+1):
-            folder_path = "/" + "/".join([parent_path.strip("/")] + rel_folder_parts[:i])
+            # Handle root parent path correctly
+            parent_clean = parent_path.strip("/")
+            if parent_clean:
+                folder_path = "/" + "/".join([parent_clean] + rel_folder_parts[:i])
+            else:
+                folder_path = "/" + "/".join(rel_folder_parts[:i])
             # Remove any double slashes
             while "//" in folder_path:
                 folder_path = folder_path.replace("//", "/")
@@ -412,8 +417,13 @@ async def upload_folder_structure(
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Failed to write file {safe_relpath}: {str(e)}")
         # Prepare file record for DB - ensure consistent path format
-        file_db_path = "/" + os.path.join(parent_path.strip("/"), safe_relpath).replace("\\", "/")
-        # Remove any double slashes
+        parent_clean = parent_path.strip("/")
+        if parent_clean:
+            file_db_path = "/" + "/".join([parent_clean, safe_relpath])
+        else:
+            file_db_path = "/" + safe_relpath
+        # Remove any double slashes and normalize
+        file_db_path = file_db_path.replace("\\", "/")
         while "//" in file_db_path:
             file_db_path = file_db_path.replace("//", "/")
             
@@ -428,7 +438,13 @@ async def upload_folder_structure(
             
         existing_folder = db.query(File).filter(File.path == normalized_folder_path, File.is_folder == True).first()
         if not existing_folder:
-            folder_name = os.path.basename(normalized_folder_path.rstrip("/")) or parent_path.strip("/")
+            # Calculate folder name properly - avoid empty names
+            folder_name = os.path.basename(normalized_folder_path.rstrip("/"))
+            if not folder_name:
+                # Handle root or edge cases - extract from the full path
+                path_parts = normalized_folder_path.strip("/").split("/")
+                folder_name = path_parts[-1] if path_parts and path_parts[-1] else "root"
+            
             db.add(File(
                 name=folder_name,
                 path=normalized_folder_path,
@@ -464,9 +480,15 @@ async def upload_folder_structure(
             # Update existing file
             existing_file.size = size
             existing_file.modified_at = datetime.utcnow()
-    db.commit()
-    from utils import log_activity
-    log_activity(db, user.id, action="Upload Folder Structure", target_path=parent_path)
+    
+    try:
+        db.commit()
+        from utils import log_activity
+        log_activity(db, user.id, action="Upload Folder Structure", target_path=parent_path)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save folder structure to database: {str(e)}")
+        
     return {"message": "Folder structure uploaded successfully", "created_folders": list(created_folders), "created_files": len(created_files)}
 
 
