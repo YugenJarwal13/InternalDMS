@@ -3,13 +3,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session
 from schemas import FolderCreate
-from dependencies import get_current_user
+from dependencies import get_current_user, check_parent_team_access
 from database import get_db
 import os
 from datetime import datetime, timezone, timedelta
 import shutil
 from utils import log_activity
-from models import File, User, ActivityLog
+from models import File, User, ActivityLog, Team, UserTeamAccess
 from typing import Dict, List, Optional, Any
 
 router = APIRouter()
@@ -25,6 +25,8 @@ def create_folder(data: FolderCreate, db: Session = Depends(get_db), user=Depend
     folder_name = data.name.strip()
     parent_path = data.parent_path.strip().lstrip("/")
     remark = data.remark  # Get the optional remark
+    
+    # Team access is now handled within check_parent_permission
     check_parent_permission(parent_path, db, user)
 
     #  Validate folder name
@@ -70,6 +72,9 @@ def list_folder_contents(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    # Apply team access check for the parent path
+    check_parent_team_access(parent_path, user, db)
+    
     abs_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
 
     if not abs_path.startswith(BASE_STORAGE_PATH):
@@ -92,8 +97,29 @@ def list_folder_contents(
             "is_folder": entry.is_dir(),
             "size": entry.stat().st_size if entry.is_file() else 0,
             "created_at": datetime.fromtimestamp(entry.stat().st_ctime, tz=timezone.utc).isoformat(),
-            "modified_at": datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc).isoformat()
+            "modified_at": datetime.fromtimestamp(entry.stat().st_mtime, tz=timezone.utc).isoformat(),
+            "is_team_folder": False,
+            "team_id": None,
+            "user_has_access": True  # Default to true, will be updated for team folders
         }
+        
+        # Check if this is a team folder (first-level folder under root)
+        if entry.is_dir() and parent_path.strip('/') == '':
+            # This is a first-level folder, check if it's a team folder
+            db_record = db.query(File).filter(File.path == normalized_path).first()
+            if db_record:
+                team = db.query(Team).filter(Team.folder_id == db_record.id).first()
+                if team:
+                    basic_info["is_team_folder"] = True
+                    basic_info["team_id"] = team.id
+                    
+                    # Check if current user has access to this team folder
+                    if user.role.name != "admin":
+                        has_access = db.query(UserTeamAccess).filter(
+                            UserTeamAccess.user_id == user.id,
+                            UserTeamAccess.team_id == team.id
+                        ).first()
+                        basic_info["user_has_access"] = has_access is not None
         
         # Try to enrich with DB metadata
         db_record = db.query(File).filter(File.path == normalized_path).first()
@@ -125,9 +151,14 @@ def rename_folder(
 ):
 
     from permission_utils import check_parent_permission, require_owner_or_admin
+    from dependencies import check_parent_team_access
+    
+    # Check team access for the folder's parent path
+    parent_path = os.path.dirname(data.old_path.strip("/"))
+    check_parent_team_access(f"/{parent_path}", user, db)
+    
     old_path = os.path.normpath(os.path.join(BASE_DIR, data.old_path.strip("/")))
     new_path = os.path.normpath(os.path.join(BASE_DIR, os.path.dirname(data.old_path.strip("/")), data.new_name))
-    parent_path = os.path.dirname(data.old_path.strip("/"))
     check_parent_permission(parent_path, db, user)
     require_owner_or_admin(data.old_path, db, user)
 
@@ -193,7 +224,12 @@ def delete_folder(
     db: Session = Depends(get_db)
 ):
     from permission_utils import check_parent_permission, require_owner_or_admin
+    from dependencies import check_parent_team_access
+    
+    # Check team access for the folder's parent path
     parent_path = os.path.dirname(path.strip("/"))
+    check_parent_team_access(f"/{parent_path}", user, db)
+    
     check_parent_permission(parent_path, db, user)
     
     # Normalize the folder path for consistent DB lookups
@@ -286,12 +322,18 @@ def move_folder(
     user=Depends(get_current_user)
 ):
     from permission_utils import check_parent_permission, require_owner_or_admin
+    from dependencies import check_parent_team_access
+    
+    # Check team access for both source and destination paths
+    src_parent = os.path.dirname(data.source_path.strip("/"))
+    dest_parent = data.destination_path.strip("/")
+    check_parent_team_access(f"/{src_parent}", user, db)
+    check_parent_team_access(f"/{dest_parent}", user, db)
+    
     src = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.source_path.strip("/")))
     dest_dir = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.destination_path.strip("/")))
     new_folder_path = os.path.join(dest_dir, os.path.basename(src))
     # Permission checks
-    src_parent = os.path.dirname(data.source_path.strip("/"))
-    dest_parent = data.destination_path.strip("/")
     check_parent_permission(src_parent, db, user)
     check_parent_permission(dest_parent, db, user)
     require_owner_or_admin(data.source_path, db, user)
@@ -368,7 +410,12 @@ async def upload_folder_structure(
     user=Depends(get_current_user)
 ):
     from permission_utils import check_parent_permission
+    from dependencies import check_parent_team_access
     import os
+    
+    # Check team access for the parent path
+    check_parent_team_access(f"/{parent_path.strip('/')}", user, db)
+    
     # Authorization: user must have permission to upload in parent_path
     check_parent_permission(parent_path, db, user)
 

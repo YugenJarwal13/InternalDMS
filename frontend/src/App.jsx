@@ -8,6 +8,7 @@ import { UserContext } from './context/UserContext';
 import Files from './pages/Files';
 import ActivityLogPage from './pages/ActivityLogPage';
 import UserManagementPage from './pages/UserManagementPage';
+import DirectoryManagementPage from './pages/DirectoryManagementPage';
 import Remote from './pages/Remote';
 
 const App = () => {
@@ -54,6 +55,16 @@ const App = () => {
         element={isAuthenticated ? (
           <MainLayout>
             <UserManagementPage />
+          </MainLayout>
+        ) : (
+          <Navigate to="/login" />
+        )}
+      />
+      <Route
+        path="/directory-management"
+        element={isAuthenticated ? (
+          <MainLayout>
+            <DirectoryManagementPage />
           </MainLayout>
         ) : (
           <Navigate to="/login" />

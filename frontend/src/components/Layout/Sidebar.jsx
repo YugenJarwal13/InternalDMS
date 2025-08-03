@@ -19,6 +19,7 @@ const Sidebar = () => {
           <>
             <Link to="/activity-log" className="hover:text-blue-300">Activity Log</Link>
             <Link to="/users" className="hover:text-blue-300">User Management</Link>
+            <Link to="/directory-management" className="hover:text-blue-300">Directory Management</Link>
           </>
         )}
       </nav>

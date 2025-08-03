@@ -4,13 +4,12 @@ from models import File as FileModel, User, ActivityLog
 from database import get_db
 from dependencies import get_current_user
 import os
-from datetime import datetime, timedelta
 import shutil
 import urllib.parse
+from datetime import datetime, timedelta
 from fastapi.responses import FileResponse
 from typing import List, Optional
 from pydantic import BaseModel
-from datetime import datetime
 from utils import log_activity
 from fastapi.encoders import jsonable_encoder
 
@@ -27,6 +26,11 @@ def disk_search(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    from permission_utils import check_parent_permission
+    
+    # Team access is now handled within check_parent_permission
+    check_parent_permission(parent_path.strip("/"), db, user)
+    
     # Only search inside user's accessible folder (parent_path)
     abs_parent = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
     if not abs_parent.startswith(BASE_STORAGE_PATH):
@@ -106,6 +110,11 @@ def disk_filter(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    from permission_utils import check_parent_permission
+    
+    # Team access is now handled within check_parent_permission
+    check_parent_permission(parent_path.strip("/"), db, user)
+    
     print(f"Filter request: parent_path={parent_path}, is_folder={is_folder}, min_size={min_size}, max_size={max_size}")
     print(f"Owner email: {owner_email}, created_after: {created_after}, created_before: {created_before}")
     
@@ -298,6 +307,8 @@ def upload_files(
 ):
 
     from permission_utils import check_parent_permission
+    
+    # Team access is now handled within check_parent_permission
     check_parent_permission(parent_path.strip("/"), db, user)
     target_folder = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
 
@@ -416,8 +427,13 @@ def rename_file(
 ):
 
     from permission_utils import check_parent_permission, require_owner_or_admin
-    old_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.path.strip("/")))
+    from dependencies import check_parent_team_access
+    
+    # Check team access for the file's parent path
     parent_path = os.path.dirname(data.path.strip("/"))
+    check_parent_team_access(f"/{parent_path}", user, db)
+    
+    old_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.path.strip("/")))
     check_parent_permission(parent_path, db, user)
     require_owner_or_admin(data.path, db, user)
 
@@ -468,12 +484,18 @@ def move_file(
 ):
 
     from permission_utils import check_parent_permission, require_owner_or_admin
+    from dependencies import check_parent_team_access
+    
+    # Check team access for both source and destination paths
+    src_parent = os.path.dirname(data.source_path.strip("/"))
+    dest_parent = data.destination_path.strip("/")
+    check_parent_team_access(f"/{src_parent}", user, db)
+    check_parent_team_access(f"/{dest_parent}", user, db)
+    
     src_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.source_path.strip("/")))
     dest_folder = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.destination_path.strip("/")))
     dest_path = os.path.join(dest_folder, os.path.basename(src_path))
     # Permission checks
-    src_parent = os.path.dirname(data.source_path.strip("/"))
-    dest_parent = data.destination_path.strip("/")
     check_parent_permission(src_parent, db, user)
     check_parent_permission(dest_parent, db, user)
     require_owner_or_admin(data.source_path, db, user)

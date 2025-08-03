@@ -1,6 +1,6 @@
 # backend/models.py
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -58,3 +58,34 @@ class ActivityLog(Base):
     details = Column(String, nullable=True)  # optional JSON string or plain text
 
     user = relationship("User", back_populates="activity_logs")
+
+
+class Team(Base):
+    __tablename__ = "teams"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False)
+    folder_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    folder = relationship("File", foreign_keys=[folder_id])
+    user_accesses = relationship("UserTeamAccess", back_populates="team", cascade="all, delete-orphan")
+
+
+class UserTeamAccess(Base):
+    __tablename__ = "user_team_access"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    team_id = Column(Integer, ForeignKey("teams.id", ondelete="CASCADE"), nullable=False)
+    granted_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    granted_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    team = relationship("Team", back_populates="user_accesses")
+    granted_by_user = relationship("User", foreign_keys=[granted_by])
+    
+    # Unique constraint to prevent duplicate user-team assignments
+    __table_args__ = (
+        UniqueConstraint('user_id', 'team_id', name='unique_user_team'),
+    )
