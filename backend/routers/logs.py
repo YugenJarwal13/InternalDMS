@@ -97,21 +97,10 @@ def search_activity_logs(
         "Upload Folder Structure", "Checked File Metadata"
     ]
     
-    # Build search query with multiple conditions - detect database type for timestamp search
+    # Build search query with multiple conditions - using PostgreSQL timestamp search
     try:
-        # Check database type
-        db_dialect = db.bind.dialect.name
-        print(f"Database dialect: {db_dialect}")
-        
-        if db_dialect == 'postgresql':
-            # PostgreSQL timestamp search
-            timestamp_search = func.to_char(ActivityLog.timestamp, 'YYYY-MM-DD HH24:MI:SS').ilike(search_term)
-        elif db_dialect == 'sqlite':
-            # SQLite timestamp search  
-            timestamp_search = func.datetime(ActivityLog.timestamp).like(search_term)
-        else:
-            # Generic fallback
-            timestamp_search = func.cast(ActivityLog.timestamp, String).ilike(search_term)
+        # PostgreSQL timestamp search
+        timestamp_search = func.to_char(ActivityLog.timestamp, 'YYYY-MM-DD HH24:MI:SS').ilike(search_term)
             
         logs_query = db.query(ActivityLog, User).join(
             User, ActivityLog.user_id == User.id, isouter=True
