@@ -198,10 +198,10 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
               const ok = await checkAuth('upload');
               if (ok) setShowUpload(true);
             }}
-            className="p-1 rounded hover:bg-green-100"
+            className="p-1 rounded hover:bg-blue-100"
             title="Upload Files"
           >
-            <HiUpload className="w-5 h-5 text-green-600" />
+            <HiUpload className="w-5 h-5 text-blue-600" />
           </button>
           <button
             onClick={async (e) => {
@@ -211,10 +211,10 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
               const ok = await checkAuth('upload');
               if (ok) setShowUploadFolder(true);
             }}
-            className="p-1 rounded hover:bg-green-200"
+            className="p-1 rounded hover:bg-blue-100"
             title="Upload Folder"
           >
-            <span role="img" aria-label="Upload Folder" className="w-5 h-5 text-green-700">📁⤴️</span>
+            <span role="img" aria-label="Upload Folder" className="w-5 h-5 text-blue-600">📁⤴️</span>
           </button>
           <button
             onClick={async (e) => {
@@ -224,10 +224,10 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
               const ok = await checkAuth('rename');
               if (ok) setShowRename(true);
             }}
-            className="p-1 rounded hover:bg-yellow-100"
+            className="p-1 rounded hover:bg-blue-100"
             title="Rename"
           >
-            <HiPencil className="w-5 h-5 text-yellow-600" />
+            <HiPencil className="w-5 h-5 text-blue-600" />
           </button>
           <button
             onClick={async (e) => {
@@ -237,10 +237,10 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
               const ok = await checkAuth('move');
               if (ok) setShowMove(true);
             }}
-            className="p-1 rounded hover:bg-purple-100"
+            className="p-1 rounded hover:bg-blue-100"
             title="Move"
           >
-            <HiArrowsRightLeft className="w-5 h-5 text-purple-600" />
+            <HiArrowsRightLeft className="w-5 h-5 text-blue-600" />
           </button>
           <button
             onClick={async (e) => {
@@ -250,10 +250,10 @@ const FolderNode = ({ path, name, isRoot = false, onAction = () => { }, onFolder
               const ok = await checkAuth('delete');
               if (ok) setShowDelete(true);
             }}
-            className="p-1 rounded hover:bg-red-100"
+            className="p-1 rounded hover:bg-blue-100"
             title="Delete"
           >
-            <HiTrash className="w-5 h-5 text-red-500" />
+            <HiTrash className="w-5 h-5 text-blue-600" />
           </button>
           {loading && <span className="ml-2 text-xs text-gray-400">Loading...</span>}
         </div>
@@ -358,10 +358,10 @@ const FileNode = ({ item, parentPath, onAction }) => {
           const ok = await checkAuth('rename');
           if (ok) setShowRename(true);
         }}
-        className="p-1 rounded hover:bg-yellow-100"
+        className="p-1 rounded hover:bg-blue-100"
         title="Rename"
       >
-        <HiPencil className="w-5 h-5 text-yellow-600" />
+        <HiPencil className="w-5 h-5 text-blue-600" />
       </button>
       <button
         onClick={async (e) => {
@@ -371,10 +371,10 @@ const FileNode = ({ item, parentPath, onAction }) => {
           const ok = await checkAuth('move');
           if (ok) setShowMove(true);
         }}
-        className="p-1 rounded hover:bg-purple-100"
+        className="p-1 rounded hover:bg-blue-100"
         title="Move"
       >
-        <HiArrowsRightLeft className="w-5 h-5 text-purple-600" />
+        <HiArrowsRightLeft className="w-5 h-5 text-blue-600" />
       </button>
       <button
         onClick={async (e) => {
@@ -384,10 +384,10 @@ const FileNode = ({ item, parentPath, onAction }) => {
           const ok = await checkAuth('delete');
           if (ok) setShowDelete(true);
         }}
-        className="p-1 rounded hover:bg-red-100"
+        className="p-1 rounded hover:bg-blue-100"
         title="Delete"
       >
-        <HiTrash className="w-5 h-5 text-red-500" />
+        <HiTrash className="w-5 h-5 text-blue-600" />
       </button>
       <RenameModal isOpen={showRename} onClose={() => setShowRename(false)} path={item.path} currentName={item.name} isFolder={false} onRenameSuccess={handleRenameSuccess} />
       <DeleteConfirmModal open={showDelete} onClose={() => setShowDelete(false)} onConfirm={handleDeleteFile} itemName={item.name} />
