@@ -439,20 +439,57 @@ const FileExplorer = () => {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const params = [];
-    if (filter.is_folder !== "") params.push(`is_folder=${filter.is_folder}`);
-    if (filter.min_size) params.push(`min_size=${filter.min_size}`);
-    if (filter.max_size) params.push(`max_size=${filter.max_size}`);
-    if (filter.owner_email) params.push(`owner_email=${encodeURIComponent(filter.owner_email)}`);
-    if (filter.created_after) params.push(`created_after=${encodeURIComponent(filter.created_after)}`);
-    if (filter.created_before) params.push(`created_before=${encodeURIComponent(filter.created_before)}`);
     
-    const queryStr = params.length ? "&" + params.join("&") : "";
     try {
-      const data = await authFetch(`/api/files/disk-filter?parent_path=${encodeURIComponent(currentFolder)}${queryStr}`);
+      // First test if backend is reachable
+      console.log('Testing backend connection...');
+      
+      const params = [];
+      if (filter.is_folder !== "") params.push(`is_folder=${filter.is_folder}`);
+      if (filter.min_size) params.push(`min_size=${filter.min_size}`);
+      if (filter.max_size) params.push(`max_size=${filter.max_size}`);
+      if (filter.owner_email) params.push(`owner_email=${encodeURIComponent(filter.owner_email)}`);
+      
+      // Handle date filters - only add if they have values
+      if (filter.created_after) {
+        params.push(`created_after=${encodeURIComponent(filter.created_after + 'T00:00:00')}`);
+      }
+      if (filter.created_before) {
+        params.push(`created_before=${encodeURIComponent(filter.created_before + 'T23:59:59')}`);
+      }
+      
+      const queryStr = params.length ? "&" + params.join("&") : "";
+      const url = `/api/files/disk-filter?parent_path=${encodeURIComponent(currentFolder)}${queryStr}`;
+      
+      console.log('Filter URL:', url);
+      console.log('Current folder:', currentFolder);
+      console.log('Filter params:', filter);
+      
+      const data = await authFetch(url);
       setResults(data);
+      console.log('Filter results:', data);
+      
     } catch (err) {
-      setError("Filter failed: " + (err.message || "Unknown error"));
+      console.error('Filter error details:', err);
+      console.error('Error type:', typeof err);
+      console.error('Error stack:', err.stack);
+      
+      // More detailed error message
+      let errorMessage = "Filter failed: ";
+      if (err.message) {
+        errorMessage += err.message;
+      } else if (err.toString) {
+        errorMessage += err.toString();
+      } else {
+        errorMessage += "Unknown error";
+      }
+      
+      // Check if it's a network error
+      if (err.message && err.message.includes('fetch')) {
+        errorMessage += " (Check if backend server is running on localhost:8000)";
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -551,7 +588,7 @@ const FileExplorer = () => {
           <div>
             <label className="block text-sm text-gray-600 mb-1">Created After</label>
             <input
-              type="datetime-local"
+              type="date"
               value={filter.created_after}
               onChange={e => setFilter(f => ({ ...f, created_after: e.target.value }))}
               className="w-full border border-blue-200 rounded px-2 py-1 text-sm"
@@ -561,7 +598,7 @@ const FileExplorer = () => {
           <div>
             <label className="block text-sm text-gray-600 mb-1">Created Before</label>
             <input
-              type="datetime-local"
+              type="date"
               value={filter.created_before}
               onChange={e => setFilter(f => ({ ...f, created_before: e.target.value }))}
               className="w-full border border-blue-200 rounded px-2 py-1 text-sm"

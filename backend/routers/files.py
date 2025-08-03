@@ -106,6 +106,9 @@ def disk_filter(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    print(f"Filter request: parent_path={parent_path}, is_folder={is_folder}, min_size={min_size}, max_size={max_size}")
+    print(f"Owner email: {owner_email}, created_after: {created_after}, created_before: {created_before}")
+    
     # Prepare owner_id filter if owner_email is provided
     owner_id = None
     if owner_email:
@@ -116,13 +119,16 @@ def disk_filter(
 
     # Validate and prepare the parent path
     abs_parent = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
+    print(f"Absolute parent path: {abs_parent}")
+    print(f"BASE_STORAGE_PATH: {BASE_STORAGE_PATH}")
+    
     if not abs_parent.startswith(BASE_STORAGE_PATH):
         raise HTTPException(status_code=400, detail="Invalid path")
     if not os.path.exists(abs_parent):
         raise HTTPException(status_code=404, detail="Folder not found")
     
     results = []
-    
+
     # First scan the filesystem to find all files/folders
     for root, dirs, files in os.walk(abs_parent):
         # Process folders if needed
@@ -141,10 +147,21 @@ def disk_filter(
                         continue
                     
                     # Skip if date filters don't match
-                    if created_after and db_record.created_at < created_after:
-                        continue
-                    if created_before and db_record.created_at > created_before:
-                        continue
+                    if created_after:
+                        # Convert created_at to UTC for comparison if it has timezone info
+                        record_time = db_record.created_at
+                        if record_time.tzinfo is not None:
+                            record_time = record_time.replace(tzinfo=None)
+                        if record_time < created_after:
+                            continue
+                    
+                    if created_before:
+                        # Convert created_at to UTC for comparison if it has timezone info
+                        record_time = db_record.created_at
+                        if record_time.tzinfo is not None:
+                            record_time = record_time.replace(tzinfo=None)
+                        if record_time > created_before:
+                            continue
                     
                     # All filters passed, create result with DB metadata
                     folder_info = {
@@ -158,8 +175,27 @@ def disk_filter(
                         "owner": db.query(User).filter(User.id == db_record.owner_id).first().email
                     }
                     results.append(folder_info)
-                # If no DB record but we're not filtering by owner or dates, include it with basic info
-                elif owner_id is None and created_after is None and created_before is None:
+                # If no DB record, check if we can include based on filesystem dates
+                else:
+                    # Only skip if we have owner filter (can't check without DB record)
+                    if owner_id is not None:
+                        continue
+                    
+                    # Check filesystem dates if date filters are applied
+                    if created_after or created_before:
+                        try:
+                            folder_stat = os.stat(os.path.join(root, d))
+                            folder_created = datetime.fromtimestamp(folder_stat.st_ctime)
+                            
+                            if created_after and folder_created < created_after:
+                                continue
+                            if created_before and folder_created > created_before:
+                                continue
+                        except (OSError, ValueError):
+                            # If we can't get filesystem dates, skip when date filters are active
+                            continue
+                    
+                    # Include with basic filesystem info
                     folder_info = {
                         "name": d,
                         "path": path_with_slash,
@@ -190,10 +226,21 @@ def disk_filter(
                         continue
                     
                     # Skip if date filters don't match
-                    if created_after and db_record.created_at < created_after:
-                        continue
-                    if created_before and db_record.created_at > created_before:
-                        continue
+                    if created_after:
+                        # Convert created_at to UTC for comparison if it has timezone info
+                        record_time = db_record.created_at
+                        if record_time.tzinfo is not None:
+                            record_time = record_time.replace(tzinfo=None)
+                        if record_time < created_after:
+                            continue
+                    
+                    if created_before:
+                        # Convert created_at to UTC for comparison if it has timezone info
+                        record_time = db_record.created_at
+                        if record_time.tzinfo is not None:
+                            record_time = record_time.replace(tzinfo=None)
+                        if record_time > created_before:
+                            continue
                     
                     # All filters passed, create result with DB metadata
                     file_info = {
@@ -208,8 +255,27 @@ def disk_filter(
                         "owner": db.query(User).filter(User.id == db_record.owner_id).first().email
                     }
                     results.append(file_info)
-                # If no DB record but we're not filtering by owner or dates, include it with basic info
-                elif owner_id is None and created_after is None and created_before is None:
+                # If no DB record, check if we can include based on filesystem dates
+                else:
+                    # Only skip if we have owner filter (can't check without DB record)
+                    if owner_id is not None:
+                        continue
+                    
+                    # Check filesystem dates if date filters are applied
+                    if created_after or created_before:
+                        try:
+                            file_stat = os.stat(os.path.join(root, f))
+                            file_created = datetime.fromtimestamp(file_stat.st_ctime)
+                            
+                            if created_after and file_created < created_after:
+                                continue
+                            if created_before and file_created > created_before:
+                                continue
+                        except (OSError, ValueError):
+                            # If we can't get filesystem dates, skip when date filters are active
+                            continue
+                    
+                    # Include with basic filesystem info
                     file_info = {
                         "name": f,
                         "path": path_with_slash,
@@ -218,6 +284,7 @@ def disk_filter(
                     }
                     results.append(file_info)
                 
+    print(f"Filter completed. Found {len(results)} results.")
     return results
 
 # ✅ MULTIPLE FILES UPLOAD
