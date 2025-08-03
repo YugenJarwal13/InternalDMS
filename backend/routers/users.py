@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from database import get_db
-from models import User, Role
+from models import User, Role, ActivityLog
 from schemas import UserCreate, TokenResponse
 from pydantic import BaseModel
 from auth import get_password_hash, verify_password, create_access_token
@@ -11,6 +11,7 @@ from dependencies import get_current_user, require_admin
 from utils import log_activity
 from schemas import UserLogin
 from fastapi.encoders import jsonable_encoder
+from datetime import datetime, timedelta
 
 router = APIRouter()
 
@@ -61,8 +62,16 @@ def delete_user(user_id: int, db: Session = Depends(get_db), admin = Depends(req
 def list_users(admin = Depends(require_admin), db: Session = Depends(get_db)):
     users = db.query(User).all()
 
-    # ✅ Log admin viewing all users
-    log_activity(db, admin.id, action="Viewed All Users", target_path="user/all")
+    # Check for duplicate logging within the last 5 seconds to prevent React strict mode double calls
+    recent_log = db.query(ActivityLog).filter(
+        ActivityLog.user_id == admin.id,
+        ActivityLog.action == "Viewed All Users",
+        ActivityLog.timestamp >= datetime.utcnow() - timedelta(seconds=5)
+    ).first()
+    
+    # Only log if no recent identical activity found
+    if not recent_log:
+        log_activity(db, admin.id, action="Viewed All Users", target_path="user/all")
 
     return [{"id": u.id, "email": u.email, "role": u.role.name} for u in users]
 

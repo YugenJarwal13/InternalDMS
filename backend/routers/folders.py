@@ -6,10 +6,10 @@ from schemas import FolderCreate
 from dependencies import get_current_user
 from database import get_db
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import shutil
 from utils import log_activity
-from models import File, User
+from models import File, User, ActivityLog
 from typing import Dict, List, Optional, Any
 
 router = APIRouter()
@@ -553,7 +553,16 @@ def get_folder_statistics(
         results.append(folder_stats)
     
     # Log the statistics request
-    log_activity(db, user.id, action="View Folder Statistics", target_path="/")
+    # Check for duplicate logging within the last 5 seconds to prevent React strict mode double calls
+    recent_log = db.query(ActivityLog).filter(
+        ActivityLog.user_id == user.id,
+        ActivityLog.action == "View Folder Statistics",
+        ActivityLog.timestamp >= datetime.utcnow() - timedelta(seconds=5)
+    ).first()
+    
+    # Only log if no recent identical activity found
+    if not recent_log:
+        log_activity(db, user.id, action="View Folder Statistics", target_path="/")
     
     return {
         "total_folders": len(results),

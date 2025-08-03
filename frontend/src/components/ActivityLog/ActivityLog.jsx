@@ -104,7 +104,7 @@ const ActivityLog = () => {
   }
 
   return (
-    <div>
+    <div className="h-full">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-2xl font-bold">Activity Log</h2>
         <span className="text-blue-600 font-semibold ml-4">
@@ -144,84 +144,87 @@ const ActivityLog = () => {
       {loading && <div>Loading...</div>}
       {error && <div className="text-red-500">{error}</div>}
       
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white rounded shadow">
-          <thead>
-            <tr>
-              <th className="px-4 py-2 border">Timestamp</th>
-              <th className="px-4 py-2 border">User</th>
-              <th className="px-4 py-2 border">Action</th>
-              <th className="px-4 py-2 border">Details</th>
-              <th className="px-4 py-2 border">Status</th>
-              <th className="px-4 py-2 border">Current Location</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayedLogs.length === 0 && !loading && (
+      {/* Fixed table container with stable dimensions */}
+      <div className="bg-white rounded shadow" style={{ width: '100%', tableLayout: 'fixed' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed">
+            <thead>
               <tr>
-                <td colSpan={6} className="text-center text-gray-500 py-4">
-                  {searchQuery ? 'No matching results found.' : 'No activity found.'}
-                </td>
+                <th className="w-40 px-4 py-2 border bg-gray-50 text-left">Timestamp</th>
+                <th className="w-32 px-4 py-2 border bg-gray-50 text-left">User</th>
+                <th className="w-36 px-4 py-2 border bg-gray-50 text-left">Action</th>
+                <th className="w-48 px-4 py-2 border bg-gray-50 text-left">Details</th>
+                <th className="w-24 px-4 py-2 border bg-gray-50 text-left">Status</th>
+                <th className="w-64 px-4 py-2 border bg-gray-50 text-left">Current Location</th>
               </tr>
-            )}
-            {(searchQuery ? displayedLogs : displayedLogs.slice(0, 20)).map((log) => (
-              <tr key={log.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2 border text-sm">
-                  {searchQuery ? 
-                    highlightMatch(formatToLocalTime(log.timestamp), searchQuery) : 
-                    formatToLocalTime(log.timestamp)
-                  }
-                </td>
-                <td className="px-4 py-2 border text-sm">
-                  {searchQuery ? 
-                    highlightMatch(log.user_email || log.user_id, searchQuery) : 
-                    (log.user_email || log.user_id)
-                  }
-                </td>
-                <td className="px-4 py-2 border text-sm">
-                  {searchQuery ? 
-                    highlightMatch(log.action, searchQuery) : 
-                    log.action
-                  }
-                </td>
-                <td className="px-4 py-2 border text-sm">
-                  {searchQuery ? 
-                    highlightMatch(log.details || '-', searchQuery) : 
-                    (log.details || '-')
-                  }
-                </td>
-                <td className="px-4 py-2 border text-sm">
-                  {log.status ? (
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
-                      log.status === 'Present' ? 'bg-green-100 text-green-800' :
-                      log.status === 'Deleted' ? 'bg-red-100 text-red-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {log.status}
-                    </span>
-                  ) : (
-                    <span className="text-gray-400">-</span>
-                  )}
-                </td>
-                <td className="px-4 py-2 border text-sm">
-                  {log.current_location ? (
-                    <span 
-                      className="text-blue-600 hover:text-blue-800 cursor-pointer font-mono text-xs"
-                      title={log.current_location}
-                    >
-                      {log.current_location.length > 50 ? 
-                        `...${log.current_location.slice(-50)}` : 
-                        log.current_location
-                      }
-                    </span>
-                  ) : (
-                    <span className="text-gray-400">-</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {displayedLogs.length === 0 && !loading && (
+                <tr>
+                  <td colSpan={6} className="text-center text-gray-500 py-8">
+                    {searchQuery ? 'No matching results found.' : 'No activity found.'}
+                  </td>
+                </tr>
+              )}
+              {(searchQuery ? displayedLogs : displayedLogs.slice(0, 20)).map((log) => (
+                <tr key={log.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-2 border text-sm w-40 truncate" title={formatToLocalTime(log.timestamp)}>
+                    {searchQuery ? 
+                      highlightMatch(formatToLocalTime(log.timestamp), searchQuery) : 
+                      formatToLocalTime(log.timestamp)
+                    }
+                  </td>
+                  <td className="px-4 py-2 border text-sm w-32 truncate" title={log.user_email || log.user_id}>
+                    {searchQuery ? 
+                      highlightMatch(log.user_email || log.user_id, searchQuery) : 
+                      (log.user_email || log.user_id)
+                    }
+                  </td>
+                  <td className="px-4 py-2 border text-sm w-36 truncate" title={log.action}>
+                    {searchQuery ? 
+                      highlightMatch(log.action, searchQuery) : 
+                      log.action
+                    }
+                  </td>
+                  <td className="px-4 py-2 border text-sm w-48 truncate" title={log.details || '-'}>
+                    {searchQuery ? 
+                      highlightMatch(log.details || '-', searchQuery) : 
+                      (log.details || '-')
+                    }
+                  </td>
+                  <td className="px-4 py-2 border text-sm w-24">
+                    {log.status ? (
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        log.status === 'Present' ? 'bg-green-100 text-green-800' :
+                        log.status === 'Deleted' ? 'bg-red-100 text-red-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {log.status}
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 border text-sm w-64 truncate">
+                    {log.current_location ? (
+                      <span 
+                        className="text-blue-600 hover:text-blue-800 cursor-pointer font-mono text-xs"
+                        title={log.current_location}
+                      >
+                        {log.current_location.length > 50 ? 
+                          `...${log.current_location.slice(-50)}` : 
+                          log.current_location
+                        }
+                      </span>
+                    ) : (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

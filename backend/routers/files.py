@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File as FastAPIFile, Form, Query, File, Body
 from sqlalchemy.orm import Session
-from models import File as FileModel,User
+from models import File as FileModel, User, ActivityLog
 from database import get_db
 from dependencies import get_current_user
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import shutil
 import urllib.parse
 from fastapi.responses import FileResponse
@@ -555,7 +555,18 @@ def get_metadata(
 
     if not record:
         raise HTTPException(status_code=404, detail="Metadata not found")
-    log_activity(db, user.id, action="Checked File Metadata", target_path=record.path)
+    
+    # Check for duplicate logging within the last 5 seconds to prevent React strict mode double calls
+    recent_log = db.query(ActivityLog).filter(
+        ActivityLog.user_id == user.id,
+        ActivityLog.action == "Checked File Metadata",
+        ActivityLog.target_path == record.path,
+        ActivityLog.timestamp >= datetime.utcnow() - timedelta(seconds=5)
+    ).first()
+    
+    # Only log if no recent identical activity found
+    if not recent_log:
+        log_activity(db, user.id, action="Checked File Metadata", target_path=record.path)
     return {
         "id": record.id,
         "name": record.name,
