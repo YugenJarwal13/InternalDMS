@@ -10,7 +10,7 @@ const MOCK_DATA = [
     file_count: 12,
     total_size: 1024 * 1024 * 3.2,
     size_formatted: "3.2 MB",
-    owner: "admin@example.com"
+    owner: "admin@gmail.com"
   },
   {
     folder_name: "Images",
@@ -28,7 +28,7 @@ const MOCK_DATA = [
     file_count: 78,
     total_size: 1024 * 1024 * 250,
     size_formatted: "250.0 MB",
-    owner: "admin@example.com"
+    owner: "admin@gmail.com"
   }
 ];
 

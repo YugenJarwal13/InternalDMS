@@ -8,6 +8,8 @@ const DirectoryManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [usersError, setUsersError] = useState('');
+  const [usersLoading, setUsersLoading] = useState(false);
   const [showCreateTeamModal, setShowCreateTeamModal] = useState(false);
   const [showAssignUserModal, setShowAssignUserModal] = useState(false);
   const [selectedTeam, setSelectedTeam] = useState(null);
@@ -30,11 +32,19 @@ const DirectoryManagement = () => {
   };
 
   const fetchUsers = async () => {
+    setUsersLoading(true);
+    setUsersError('');
     try {
       const data = await authFetch('/api/users/all');
       setUsers(data);
+      console.log('Fetched users:', data); // Debug log
     } catch (err) {
-      console.error('Failed to fetch users:', err);
+      const errorMessage = 'Failed to fetch users: ' + (err.message || 'Unknown error');
+      console.error(errorMessage, err);
+      setUsersError(errorMessage);
+      setUsers([]); // Clear users on error
+    } finally {
+      setUsersLoading(false);
     }
   };
 
@@ -120,12 +130,18 @@ const DirectoryManagement = () => {
     setSelectedTeam(team);
     setUserForm({ user_id: '' });
     setFormError('');
+    setUsersError(''); // Clear any previous user errors
     setShowAssignUserModal(true);
+    
+    // Refresh users list when opening modal to ensure it's up-to-date
+    if (users.length === 0 || usersError) {
+      fetchUsers();
+    }
   };
 
   const navigateToTeamFolder = (folderPath) => {
-    // You can implement navigation to the file explorer with this folder path
-    window.open(`/files?path=${encodeURIComponent(folderPath)}`, '_blank');
+    // Navigate to the file explorer with this folder path in the same tab
+    window.location.href = `/files?path=${encodeURIComponent(folderPath)}`;
   };
 
   if (user?.role !== 'admin') {
@@ -265,22 +281,46 @@ const DirectoryManagement = () => {
           <form className="bg-white p-6 rounded shadow-md w-full max-w-sm" onSubmit={handleAssignUser}>
             <h3 className="text-xl font-bold mb-4">Add User to "{selectedTeam.name}"</h3>
             {formError && <div className="text-red-500 mb-2">{formError}</div>}
-            <select
-              name="user_id"
-              value={userForm.user_id}
-              onChange={(e) => setUserForm({ ...userForm, user_id: e.target.value })}
-              className="w-full mb-4 p-2 border border-gray-300 rounded"
-              required
-            >
-              <option value="">Select a user</option>
-              {users
-                .filter(u => !selectedTeam.users.some(tu => tu.id === u.id))
-                .map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.email} ({u.role})
-                  </option>
-                ))}
-            </select>
+            {usersError && <div className="text-red-500 mb-2">{usersError}</div>}
+            {usersLoading ? (
+              <div className="text-gray-500 mb-4">Loading users...</div>
+            ) : (
+              <select
+                name="user_id"
+                value={userForm.user_id}
+                onChange={(e) => setUserForm({ ...userForm, user_id: e.target.value })}
+                className="w-full mb-4 p-2 border border-gray-300 rounded"
+                required
+              >
+                <option value="">Select a user</option>
+                {(() => {
+                  const availableUsers = users.filter(u => !selectedTeam.users.some(tu => tu.id === u.id));
+                  
+                  // Enhanced debugging
+                  console.log('=== ADD USER DROPDOWN DEBUG ===');
+                  console.log('Selected Team:', selectedTeam.name, '(ID:', selectedTeam.id, ')');
+                  console.log('Team users:', selectedTeam.users.map(tu => ({ id: tu.id, email: tu.email })));
+                  console.log('All users from API:', users.map(u => ({ id: u.id, email: u.email, role: u.role })));
+                  console.log('Available users for dropdown:', availableUsers.map(u => ({ id: u.id, email: u.email })));
+                  
+                  // Specific check for yugenj
+                  const yugenj = users.find(u => u.email.includes('yugenj'));
+                  if (yugenj) {
+                    const isInTeam = selectedTeam.users.some(tu => tu.id === yugenj.id);
+                    console.log(`YUGENJ CHECK: Found ${yugenj.email} (ID: ${yugenj.id}), Already in team: ${isInTeam}`);
+                  } else {
+                    console.log('YUGENJ CHECK: User yugenj not found in users list');
+                  }
+                  console.log('=== END DEBUG ===');
+                  
+                  return availableUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.email} ({u.role})
+                    </option>
+                  ));
+                })()}
+              </select>
+            )}
             <div className="flex gap-2">
               <button
                 type="submit"

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.orm import Session
 from schemas import FolderCreate
-from dependencies import get_current_user, check_parent_team_access
+from dependencies import get_current_user
 from database import get_db
 import os
 from datetime import datetime, timezone, timedelta
@@ -72,8 +72,7 @@ def list_folder_contents(
     user=Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Apply team access check for the parent path
-    check_parent_team_access(parent_path, user, db)
+    # Team access is now handled by the folder permissions system
     
     abs_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
 
@@ -151,16 +150,14 @@ def rename_folder(
 ):
 
     from permission_utils import check_parent_permission, require_owner_or_admin
-    from dependencies import check_parent_team_access
     
-    # Check team access for the folder's parent path
+    # Check permissions (includes team access)
     parent_path = os.path.dirname(data.old_path.strip("/"))
-    check_parent_team_access(f"/{parent_path}", user, db)
+    check_parent_permission(parent_path, db, user)
+    require_owner_or_admin(data.old_path, db, user)
     
     old_path = os.path.normpath(os.path.join(BASE_DIR, data.old_path.strip("/")))
     new_path = os.path.normpath(os.path.join(BASE_DIR, os.path.dirname(data.old_path.strip("/")), data.new_name))
-    check_parent_permission(parent_path, db, user)
-    require_owner_or_admin(data.old_path, db, user)
 
     #  Prevent traversal
     if not old_path.startswith(BASE_DIR) or not new_path.startswith(BASE_DIR):
@@ -224,12 +221,9 @@ def delete_folder(
     db: Session = Depends(get_db)
 ):
     from permission_utils import check_parent_permission, require_owner_or_admin
-    from dependencies import check_parent_team_access
     
-    # Check team access for the folder's parent path
+    # Check permissions (includes team access)
     parent_path = os.path.dirname(path.strip("/"))
-    check_parent_team_access(f"/{parent_path}", user, db)
-    
     check_parent_permission(parent_path, db, user)
     
     # Normalize the folder path for consistent DB lookups
@@ -322,13 +316,10 @@ def move_folder(
     user=Depends(get_current_user)
 ):
     from permission_utils import check_parent_permission, require_owner_or_admin
-    from dependencies import check_parent_team_access
     
-    # Check team access for both source and destination paths
+    # Check permissions for both source and destination paths (includes team access)
     src_parent = os.path.dirname(data.source_path.strip("/"))
     dest_parent = data.destination_path.strip("/")
-    check_parent_team_access(f"/{src_parent}", user, db)
-    check_parent_team_access(f"/{dest_parent}", user, db)
     
     src = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.source_path.strip("/")))
     dest_dir = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.destination_path.strip("/")))
@@ -410,13 +401,9 @@ async def upload_folder_structure(
     user=Depends(get_current_user)
 ):
     from permission_utils import check_parent_permission
-    from dependencies import check_parent_team_access
     import os
     
-    # Check team access for the parent path
-    check_parent_team_access(f"/{parent_path.strip('/')}", user, db)
-    
-    # Authorization: user must have permission to upload in parent_path
+    # Authorization: user must have permission to upload in parent_path (includes team access)
     check_parent_permission(parent_path, db, user)
 
     # Save each file to the correct location and collect all folders

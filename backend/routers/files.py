@@ -28,7 +28,7 @@ def disk_search(
 ):
     from permission_utils import check_parent_permission
     
-    # Team access is now handled within check_parent_permission
+    # Permission check now includes team access
     check_parent_permission(parent_path.strip("/"), db, user)
     
     # Only search inside user's accessible folder (parent_path)
@@ -112,7 +112,7 @@ def disk_filter(
 ):
     from permission_utils import check_parent_permission
     
-    # Team access is now handled within check_parent_permission
+    # Permission check now includes team access
     check_parent_permission(parent_path.strip("/"), db, user)
     
     print(f"Filter request: parent_path={parent_path}, is_folder={is_folder}, min_size={min_size}, max_size={max_size}")
@@ -308,7 +308,7 @@ def upload_files(
 
     from permission_utils import check_parent_permission
     
-    # Team access is now handled within check_parent_permission
+    # Permission check now includes team access
     check_parent_permission(parent_path.strip("/"), db, user)
     target_folder = os.path.abspath(os.path.join(BASE_STORAGE_PATH, parent_path.strip("/")))
 
@@ -427,15 +427,13 @@ def rename_file(
 ):
 
     from permission_utils import check_parent_permission, require_owner_or_admin
-    from dependencies import check_parent_team_access
     
-    # Check team access for the file's parent path
+    # Check permissions (includes team access)
     parent_path = os.path.dirname(data.path.strip("/"))
-    check_parent_team_access(f"/{parent_path}", user, db)
-    
-    old_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.path.strip("/")))
     check_parent_permission(parent_path, db, user)
     require_owner_or_admin(data.path, db, user)
+    
+    old_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.path.strip("/")))
 
     # ✅ Path validation
     if not old_path.startswith(BASE_STORAGE_PATH):
@@ -484,21 +482,17 @@ def move_file(
 ):
 
     from permission_utils import check_parent_permission, require_owner_or_admin
-    from dependencies import check_parent_team_access
     
-    # Check team access for both source and destination paths
+    # Check permissions for both source and destination (includes team access)
     src_parent = os.path.dirname(data.source_path.strip("/"))
     dest_parent = data.destination_path.strip("/")
-    check_parent_team_access(f"/{src_parent}", user, db)
-    check_parent_team_access(f"/{dest_parent}", user, db)
+    check_parent_permission(src_parent, db, user)
+    check_parent_permission(dest_parent, db, user)
+    require_owner_or_admin(data.source_path, db, user)
     
     src_path = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.source_path.strip("/")))
     dest_folder = os.path.abspath(os.path.join(BASE_STORAGE_PATH, data.destination_path.strip("/")))
     dest_path = os.path.join(dest_folder, os.path.basename(src_path))
-    # Permission checks
-    check_parent_permission(src_parent, db, user)
-    check_parent_permission(dest_parent, db, user)
-    require_owner_or_admin(data.source_path, db, user)
 
     #  Safety checks
     if not src_path.startswith(BASE_STORAGE_PATH) or not dest_folder.startswith(BASE_STORAGE_PATH):
