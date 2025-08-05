@@ -1,9 +1,28 @@
-fastapi
-uvicorn
-sqlalchemy
-psycopg2-binary
-python-multipart
-python-jose[cryptography]
-passlib[bcrypt]
-python-dotenv
-aiofiles
+# Core FastAPI and Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# Database and ORM
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+alembic==1.12.1
+
+# Authentication and Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.6
+
+# Environment and Configuration
+python-dotenv==1.0.0
+
+# File Operations
+aiofiles==23.2.1
+
+# Development and Testing (Optional)
+pytest==7.4.3
+pytest-asyncio==0.21.1
+httpx==0.25.2
+
+# Additional Utilities
+python-dateutil==2.8.2
+email-validator==2.1.0
